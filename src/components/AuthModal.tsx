@@ -36,11 +36,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const t = translations[lang];
 
   type AuthTab = 'client-login' | 'admin-login' | 'register' | 'forgot-password';
-  const [activeTab, setActiveTab] = useState<AuthTab>('admin-login');
+  const [activeTab, setActiveTab] = useState<AuthTab>('client-login');
 
-  // Login form state
-  const [loginEmail, setLoginEmail] = useState('contact@isonil.com');
-  const [loginPassword, setLoginPassword] = useState('admin@isonil2025');
+  // Login form state (empty by default; never assume admin role or credentials)
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Register form state
@@ -62,7 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccessAlert, setPasswordSuccessAlert] = useState<string | null>(null);
 
-  // Handle Login
+  // Handle Login: determine role strictly from authenticated account and credentials
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
@@ -89,12 +89,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Check custom password if set
-    if (matchedUser.password && matchedUser.password !== loginPassword) {
+    // Verify password strictly
+    const expectedPassword = matchedUser.password || (matchedUser.role === 'admin' ? 'admin@isonil2025' : 'client@isonil2025');
+    if (loginPassword !== expectedPassword) {
       setLoginError(lang === 'ar' ? 'كلمة المرور المدخلة غير صحيحة.' : 'Mot de passe incorrect.');
       return;
     }
 
+    // Authenticate user with verified role
     onLoginSuccess(matchedUser);
   };
 

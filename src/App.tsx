@@ -17,7 +17,9 @@ import {
   loadStoredTheme,
   saveStoredTheme,
   loadStoredLayout,
-  saveStoredLayout
+  saveStoredLayout,
+  loadVerifiedStoredSession,
+  saveStoredCurrentSession
 } from './data/mockData';
 import { CinematicWelcome } from './components/CinematicWelcome';
 import { Header } from './components/Header';
@@ -56,10 +58,9 @@ export default function App() {
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadStoredNotifications());
   const [backups, setBackups] = useState<BackupSnapshot[]>(() => loadStoredBackups());
 
-  // 6. Current Session
+  // 6. Current Session: initialized strictly from verified session or null (never default to admin)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const loaded = loadStoredUsers();
-    return loaded.find((u) => u.role === 'admin') || null;
+    return loadVerifiedStoredSession();
   });
 
   // 7. Admin active sub-view
@@ -124,14 +125,28 @@ export default function App() {
     setLang(newLang);
   };
 
-  // Handler: Login Success
+  // Handler: Login Success (determines role from authenticated account and verified permissions)
   const handleLoginSuccess = (user: User) => {
-    setCurrentUser(user);
+    // Re-verify against users store to ensure verified role permissions
+    const verified = users.find((u) => u.id === user.id && u.email.toLowerCase() === user.email.toLowerCase());
+    const validUser = verified || user;
+    const authenticatedUser: User = {
+      ...validUser,
+      role: validUser.role === 'admin' ? 'admin' : 'client',
+    };
+    saveStoredCurrentSession({
+      userId: authenticatedUser.id,
+      email: authenticatedUser.email,
+      role: authenticatedUser.role,
+      loginAt: new Date().toISOString(),
+    });
+    setCurrentUser(authenticatedUser);
     setShowAuthModalManually(false);
   };
 
-  // Handler: Logout
+  // Handler: Logout (clears session and returns to login modal)
   const handleLogout = () => {
+    saveStoredCurrentSession(null);
     setCurrentUser(null);
     setShowAuthModalManually(true);
   };
@@ -587,7 +602,7 @@ export default function App() {
         <UploadModal
           lang={lang}
           currentUser={currentUser}
-          projects={clientProjects.length > 0 ? clientProjects : projects}
+          projects={currentUser.role === 'admin' ? projects : clientProjects}
           preselectedProjectId={uploadPreselectedProjectId}
           onClose={() => setShowUploadModal(false)}
           onUploadSuccess={handleUploadSuccess}
