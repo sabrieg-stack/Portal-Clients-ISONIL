@@ -46,7 +46,7 @@ export const CinematicWelcome: React.FC<CinematicWelcomeProps> = ({ lang, onFini
       <div className="absolute top-0 left-0 right-0 p-6 md:p-8 flex items-center justify-between z-20">
         <div className="flex items-center gap-3">
           <img 
-            src="/public/assets/aistudio/1000127389_fa23437c.png" 
+            src="/logo.png" 
             alt="ISONIL Logo" 
             className="h-10 md:h-12 w-auto object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)]"
           />
