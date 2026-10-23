@@ -271,7 +271,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Logo only - without redundant text next to it */}
           <div className="flex items-center">
             <img 
-              src="/public/assets/aistudio/1000127389_fa23437c.png" 
+              src="/logo.png" 
               alt="ISONIL" 
               className="h-9 md:h-11 w-auto object-contain select-none"
             />
