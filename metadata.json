@@ -1,0 +1,6 @@
+{
+  "name": "Portal Clients ISONIL",
+  "description": "بوابة العملاء وإدارة المشاريع لشركة ISONIL Maroc للعزل الحراري الصناعي - Portal Clients & Gestion de Projets ISONIL Maroc",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

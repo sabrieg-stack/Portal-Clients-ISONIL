@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-arabic: 'Cairo', system-ui, -apple-system, sans-serif;
+    --font-latin: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+  
+  html[dir="rtl"] {
+    font-family: var(--font-arabic);
+  }
+
+  html[dir="ltr"] {
+    font-family: var(--font-latin);
+  }
+
+  body {
+    background-color: #0d1117;
+    color: #f1f5f9;
+    overflow-x: hidden;
+  }
+}
+
+/* 5 Theme color definitions */
+html[data-theme="beige"], :root {
+  --theme-accent: #d4b996;
+  --theme-accent-hover: #c5a882;
+  --theme-accent-light: #f5efe8;
+  --theme-accent-glow: rgba(212, 185, 150, 0.2);
+  --theme-accent-border: rgba(212, 185, 150, 0.4);
+  --theme-text-contrast: #0d1117;
+}
+
+html[data-theme="silver"] {
+  --theme-accent: #cbd5e1;
+  --theme-accent-hover: #94a3b8;
+  --theme-accent-light: #f8fafc;
+  --theme-accent-glow: rgba(203, 213, 225, 0.25);
+  --theme-accent-border: rgba(203, 213, 225, 0.45);
+  --theme-text-contrast: #0f172a;
+}
+
+html[data-theme="bronze"] {
+  --theme-accent: #f59e0b;
+  --theme-accent-hover: #d97706;
+  --theme-accent-light: #fef3c7;
+  --theme-accent-glow: rgba(245, 158, 11, 0.25);
+  --theme-accent-border: rgba(245, 158, 11, 0.45);
+  --theme-text-contrast: #0f172a;
+}
+
+html[data-theme="navy"] {
+  --theme-accent: #38bdf8;
+  --theme-accent-hover: #0284c7;
+  --theme-accent-light: #e0f2fe;
+  --theme-accent-glow: rgba(56, 189, 248, 0.25);
+  --theme-accent-border: rgba(56, 189, 248, 0.45);
+  --theme-text-contrast: #0f172a;
+}
+
+html[data-theme="emerald"] {
+  --theme-accent: #10b981;
+  --theme-accent-hover: #059669;
+  --theme-accent-light: #d1fae5;
+  --theme-accent-glow: rgba(16, 185, 129, 0.25);
+  --theme-accent-border: rgba(16, 185, 129, 0.45);
+  --theme-text-contrast: #ffffff;
+}
+
+/* Dynamic theme helper classes */
+.theme-btn {
+  background-color: var(--theme-accent) !important;
+  color: var(--theme-text-contrast) !important;
+}
+.theme-btn:hover {
+  background-color: var(--theme-accent-hover) !important;
+}
+.theme-text {
+  color: var(--theme-accent) !important;
+}
+.theme-border {
+  border-color: var(--theme-accent-border) !important;
+}
+.theme-border-solid {
+  border-color: var(--theme-accent) !important;
+}
+.theme-bg-subtle {
+  background-color: var(--theme-accent-glow) !important;
+}
+
+.bg-theme {
+  background-color: var(--theme-accent) !important;
+}
+.bg-theme-hover:hover {
+  background-color: var(--theme-accent-hover) !important;
+}
+.text-theme {
+  color: var(--theme-accent) !important;
+}
+.border-theme {
+  border-color: var(--theme-accent-border) !important;
+}
+.bg-theme-subtle {
+  background-color: var(--theme-accent-glow) !important;
+}
+.text-theme-contrast {
+  color: var(--theme-text-contrast) !important;
+}
+
+/* Custom sleek scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(13, 17, 23, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--theme-accent-border, rgba(212, 185, 150, 0.25));
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--theme-accent, rgba(212, 185, 150, 0.45));
+}
+
+/* PRINT ENGINE FORMATTING */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  
+  html, body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    overflow: visible !important;
+    height: auto !important;
+    font-size: 11pt !important;
+  }
+  
+  /* Hide non-printable app wrapper elements */
+  header, footer, nav, .no-print, [role="dialog"] > div > div:first-child, button {
+    display: none !important;
+  }
+
+  /* Expose printable document cleanly */
+  #printable-document {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  #printable-document * {
+    visibility: visible !important;
+    background: transparent !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
+  }
+  
+  .print-header {
+    display: block !important;
+  }
+
+  .print-stamp {
+    display: block !important;
+  }
+}
