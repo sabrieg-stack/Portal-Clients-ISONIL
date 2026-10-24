@@ -72,13 +72,13 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
       {/* Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-xl bg-[#21262d] hover:bg-[#30363d] text-slate-300 hover:text-white border border-[#30363d] transition-all cursor-pointer focus:outline-none"
+        className="relative h-9 w-9 flex items-center justify-center rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 hover:text-white border border-[#79C8E8]/25 transition-all cursor-pointer focus:outline-none"
         title={t.notificationsTitle}
         aria-label={t.notificationsTitle}
       >
-        <Bell className="w-4 h-4 text-[#d4b996]" />
+        <Bell className="w-4 h-4 theme-text" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-[#d4b996] text-[10px] font-bold text-slate-950 ring-2 ring-[#0d1117] animate-pulse">
+          <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-[#DFC57B] text-[10px] font-bold text-[#0B192C] ring-2 ring-[#0B192C] animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
