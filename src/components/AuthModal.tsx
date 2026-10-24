@@ -194,8 +194,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             onClick={() => { 
               setActiveTab('admin-login'); 
               setLoginError(null); 
-              setLoginEmail('contact@isonil.com'); 
-              setLoginPassword('admin@isonil2025'); 
+              setLoginEmail(''); 
+              setLoginPassword(''); 
             }}
             className={`flex-1 py-3 px-3 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer ${
               activeTab === 'admin-login'
