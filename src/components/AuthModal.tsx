@@ -38,6 +38,10 @@ interface AuthModalProps {
   onRegisterAdminAccount?: (adminUser: User) => void;
   onRequestAccount: (data: Omit<PendingRegistration, 'id' | 'requestedAt'>) => void;
   onUpdateUserPassword?: (email: string, newPass: string) => void;
+  isAdminPortalRoute?: boolean;
+  onNavigateToAdminRoute?: () => void;
+  onNavigateToClientRoute?: () => void;
+  showAdminLinkOnClient?: boolean;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -49,11 +53,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onRegisterAdminAccount,
   onRequestAccount,
   onUpdateUserPassword,
+  isAdminPortalRoute = false,
+  onNavigateToAdminRoute,
+  onNavigateToClientRoute,
+  showAdminLinkOnClient = false,
 }) => {
   const t = translations[lang];
 
   type AuthTab = 'client-login' | 'admin-login' | 'register' | 'forgot-password';
-  const [activeTab, setActiveTab] = useState<AuthTab>('client-login');
+  const [activeTab, setActiveTab] = useState<AuthTab>(() =>
+    isAdminPortalRoute ? 'admin-login' : 'client-login'
+  );
+
+  React.useEffect(() => {
+    if (isAdminPortalRoute) {
+      setActiveTab('admin-login');
+    } else {
+      setActiveTab('client-login');
+    }
+    setLoginError(null);
+  }, [isAdminPortalRoute]);
 
   const existingAdmins = useMemo(
     () => users.filter((u) => u.role === 'admin' && u.status === 'active'),
@@ -603,53 +622,61 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="w-full max-w-xl bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl">
         
         {/* Header Navigation Tabs */}
-        <div className="flex border-b border-[#30363d] bg-[#0B192C]/90 p-2 gap-1.5">
-          <button
-            type="button"
-            onClick={() => { 
-              setActiveTab('client-login'); 
-              setLoginError(null); 
-            }}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer ${
-              activeTab === 'client-login'
-                ? 'theme-btn font-bold shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-[#21262d]'
-            }`}
-          >
-            {t.clientLoginTab}
-          </button>
+        <div className="flex border-b border-[#30363d] bg-[#0B192C]/90 p-2 gap-1.5 items-center">
+          {isAdminPortalRoute ? (
+            /* Dedicated Admin Route Header */
+            <>
+              <div className="flex-1 py-2 px-3 rounded-xl text-xs md:text-sm font-bold theme-btn shadow-md text-center flex items-center justify-center gap-2">
+                <ShieldCheck className="w-4 h-4" />
+                <span>{t.adminLoginTab}</span>
+              </div>
+              {onNavigateToClientRoute && (
+                <button
+                  type="button"
+                  onClick={onNavigateToClientRoute}
+                  className="py-2 px-3 rounded-xl text-xs md:text-sm font-semibold text-slate-300 hover:text-white hover:bg-[#21262d] transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                  title={lang === 'ar' ? 'الرجوع إلى بوابة العملاء' : 'Retour au portail clients'}
+                >
+                  {lang === 'ar' ? <ArrowRight className="w-3.5 h-3.5" /> : <ArrowLeft className="w-3.5 h-3.5" />}
+                  <span>{lang === 'ar' ? 'بوابة العملاء' : 'Portail Clients'}</span>
+                </button>
+              )}
+            </>
+          ) : (
+            /* Default Client Portal Tabs (No Admin tab is shown here) */
+            <>
+              <button
+                type="button"
+                onClick={() => { 
+                  setActiveTab('client-login'); 
+                  setLoginError(null); 
+                }}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer ${
+                  activeTab === 'client-login'
+                    ? 'theme-btn font-bold shadow-md'
+                    : 'text-slate-300 hover:text-white hover:bg-[#21262d]'
+                }`}
+              >
+                {t.clientLoginTab}
+              </button>
 
-          <button
-            type="button"
-            onClick={() => { 
-              setActiveTab('admin-login'); 
-              setShowAdminSetupMode(false);
-              setLoginError(null); 
-            }}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer ${
-              activeTab === 'admin-login'
-                ? 'theme-btn font-bold shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-[#21262d]'
-            }`}
-          >
-            {t.adminLoginTab}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { 
-              setActiveTab('register'); 
-              setRegSubmitted(false); 
-              setRegError(null);
-            }}
-            className={`flex-1 py-2.5 px-3 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer ${
-              activeTab === 'register'
-                ? 'theme-btn font-bold shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-[#21262d]'
-            }`}
-          >
-            {t.requestAccountTab}
-          </button>
+              <button
+                type="button"
+                onClick={() => { 
+                  setActiveTab('register'); 
+                  setRegSubmitted(false); 
+                  setRegError(null);
+                }}
+                className={`flex-1 py-2.5 px-3 rounded-xl text-xs md:text-sm font-semibold transition-all cursor-pointer ${
+                  activeTab === 'register'
+                    ? 'theme-btn font-bold shadow-md'
+                    : 'text-slate-300 hover:text-white hover:bg-[#21262d]'
+                }`}
+              >
+                {t.requestAccountTab}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Card Content Body */}
@@ -766,6 +793,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {lang === 'ar' ? 'الدخول عبر حساب Google' : 'Continuer avec Google'}
                 </span>
               </button>
+
+              {/* Optional discreet Admin link only if enabled by administrator setting */}
+              {showAdminLinkOnClient && onNavigateToAdminRoute && (
+                <div className="mt-5 pt-3 border-t border-[#30363d]/50 text-center">
+                  <button
+                    type="button"
+                    onClick={onNavigateToAdminRoute}
+                    className="text-[11px] text-slate-400 hover:text-[#DFC57B] transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'الوصول إلى بوابة الإدارة' : 'Accès Portail Administration'}</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -982,6 +1023,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </span>
                     </button>
                   </div>
+
+                  {onNavigateToClientRoute && (
+                    <div className="mt-2 text-center">
+                      <button
+                        type="button"
+                        onClick={onNavigateToClientRoute}
+                        className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        {lang === 'ar' ? <ArrowRight className="w-3.5 h-3.5" /> : <ArrowLeft className="w-3.5 h-3.5" />}
+                        <span>{lang === 'ar' ? 'الرجوع إلى بوابة العملاء' : 'Retour au portail clients'}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1311,22 +1365,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         </div>
 
-        {/* Footer info & Language Switcher */}
-        <div className="px-6 py-3 bg-[#0B192C] border-t border-[#30363d] flex items-center justify-between text-[11px] text-slate-300">
+        {/* Footer info: Clean corporate branding, single language selector is in the top Header */}
+        <div className="px-6 py-3 bg-[#0B192C] border-t border-[#30363d] flex items-center justify-center text-[11px] text-slate-400">
           <span className="flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-[#DFC57B]" />
             <span>ISONIL Maroc — El Jadida</span>
           </span>
-          {onLanguageChange && (
-            <button
-              type="button"
-              onClick={() => onLanguageChange(lang === 'ar' ? 'fr' : 'ar')}
-              className="flex items-center gap-1 text-[#79C8E8] hover:underline font-semibold cursor-pointer"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>{lang === 'ar' ? 'Français' : 'العربية'}</span>
-            </button>
-          )}
         </div>
       </div>
     </div>

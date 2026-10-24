@@ -53,6 +53,20 @@ const THEME_HEX: Record<ThemeColor, { accent: string; hover: string; glow: strin
   emerald: { accent: '#10b981', hover: '#059669', glow: 'rgba(16, 185, 129, 0.25)', border: 'rgba(16, 185, 129, 0.45)', contrast: '#ffffff' },
 };
 
+const checkIsAdminRoute = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const hash = (window.location.hash || '').toLowerCase();
+  const path = (window.location.pathname || '').toLowerCase();
+  const search = (window.location.search || '').toLowerCase();
+  return (
+    hash.includes('admin') ||
+    path.endsWith('/admin') ||
+    path.includes('/admin/') ||
+    search.includes('portal=admin') ||
+    search.includes('role=admin')
+  );
+};
+
 export default function App() {
   // 1. Language state persisted across sessions
   const [lang, setLang] = useState<Language>(() => {
@@ -95,6 +109,49 @@ export default function App() {
   const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
   const [uploadPreselectedProjectId, setUploadPreselectedProjectId] = useState<string | undefined>(undefined);
   const [showAuthModalManually, setShowAuthModalManually] = useState<boolean>(false);
+
+  // 9. Separate Admin Portal Route State & Setting
+  const [isAdminPortalRoute, setIsAdminPortalRoute] = useState<boolean>(() => checkIsAdminRoute());
+  const [showAdminLinkOnClient, setShowAdminLinkOnClient] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('isonil_show_admin_link') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setIsAdminPortalRoute(checkIsAdminRoute());
+    };
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
+
+  const navigateToAdminRoute = () => {
+    window.location.hash = '#admin';
+    setIsAdminPortalRoute(true);
+  };
+
+  const navigateToClientRoute = () => {
+    if (window.location.hash.includes('admin')) {
+      window.location.hash = '';
+    }
+    setIsAdminPortalRoute(false);
+  };
+
+  const handleToggleShowAdminLink = (show: boolean) => {
+    setShowAdminLinkOnClient(show);
+    try {
+      localStorage.setItem('isonil_show_admin_link', show ? 'true' : 'false');
+    } catch {
+      // ignore
+    }
+  };
 
   // Sync document direction and lang
   useEffect(() => {
@@ -682,6 +739,19 @@ export default function App() {
     );
   }, [currentUser, projects]);
 
+  // Strict RBAC: Filter attachments belonging to client projects or assigned to client
+  const clientAttachments = React.useMemo(() => {
+    if (!currentUser) return [];
+    if (currentUser.role === 'admin') return attachments;
+    const clientProjectIds = new Set(clientProjects.map((p) => p.id));
+    return attachments.filter(
+      (att) =>
+        clientProjectIds.has(att.projectId) ||
+        att.clientId === currentUser.id ||
+        (currentUser.uid && att.clientId === currentUser.uid)
+    );
+  }, [currentUser, attachments, clientProjects]);
+
   return (
     <div className="min-h-screen bg-[#0B192C] text-white flex flex-col font-sans selection:bg-[#DFC57B] selection:text-[#0B192C]">
       {/* 1. CINEMATIC WELCOME SCREEN */}
@@ -699,6 +769,8 @@ export default function App() {
         onLanguageChange={handleLanguageChange}
         currentUser={currentUser}
         isAuthScreen={!currentUser || showAuthModalManually}
+        isAdminPortalRoute={isAdminPortalRoute}
+        onNavigateToClientRoute={navigateToClientRoute}
         activeAdminSubView={activeAdminSubView}
         onAdminSubViewChange={setActiveAdminSubView}
         onLogout={handleLogout}
@@ -726,6 +798,10 @@ export default function App() {
             onRegisterAdminAccount={handleRegisterAdminAccount}
             onRequestAccount={handleRequestAccount}
             onUpdateUserPassword={handleUpdateUserPassword}
+            isAdminPortalRoute={isAdminPortalRoute}
+            onNavigateToAdminRoute={navigateToAdminRoute}
+            onNavigateToClientRoute={navigateToClientRoute}
+            showAdminLinkOnClient={showAdminLinkOnClient}
           />
         ) : currentUser.role === 'admin' ? (
           <div>
@@ -744,6 +820,8 @@ export default function App() {
                 onCreateProject={handleCreateProject}
                 onCreateBackup={handleCreateBackup}
                 onRestoreBackup={handleRestoreBackup}
+                showAdminLinkOnClient={showAdminLinkOnClient}
+                onToggleShowAdminLink={handleToggleShowAdminLink}
               />
             ) : (
               <MailboxWorkspace
@@ -771,7 +849,7 @@ export default function App() {
             lang={lang}
             currentUser={currentUser}
             clientProjects={clientProjects}
-            attachments={attachments}
+            attachments={clientAttachments}
             layoutModel={layoutModel}
             onLayoutChange={setLayoutModel}
             onOpenViewer={(att) => setSelectedAttachmentForViewer(att)}

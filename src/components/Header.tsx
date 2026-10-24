@@ -30,6 +30,8 @@ interface HeaderProps {
   onLanguageChange: (lang: Language) => void;
   currentUser: User | null;
   isAuthScreen?: boolean;
+  isAdminPortalRoute?: boolean;
+  onNavigateToClientRoute?: () => void;
   activeAdminSubView?: 'dashboard' | 'workspace';
   onAdminSubViewChange?: (view: 'dashboard' | 'workspace') => void;
   onLogout: () => void;
@@ -50,6 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLanguageChange,
   currentUser,
   isAuthScreen = false,
+  isAdminPortalRoute = false,
+  onNavigateToClientRoute,
   activeAdminSubView = 'workspace',
   onAdminSubViewChange,
   onLogout,
@@ -103,29 +107,50 @@ export const Header: React.FC<HeaderProps> = ({
 
   const activeThemeObj = themeOptions.find((o) => o.id === themeColor) || themeOptions[0];
 
-  // Login screen header: Only the official ISONIL logo image + Language Switcher (AR / FR)
+  // Login screen header: Official ISONIL logo image + Single Language Switcher (AR / FR)
   if (!currentUser || isAuthScreen) {
     return (
       <header className="sticky top-0 z-40 bg-[#0B192C]/95 backdrop-blur-md border-b border-[#79C8E8]/20 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
             <img 
               src="/logo.png" 
               alt="ISONIL" 
               className="h-10 md:h-11 w-auto object-contain select-none"
             />
+            {isAdminPortalRoute && (
+              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#112239] border border-[#DFC57B]/40 text-[#DFC57B] text-[11px] font-bold">
+                <Shield className="w-3 h-3" />
+                <span>{lang === 'ar' ? 'بوابة الإدارة' : 'Administration'}</span>
+              </span>
+            )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => onLanguageChange(lang === 'ar' ? 'fr' : 'ar')}
-            className="h-9 flex items-center gap-2 px-3.5 rounded-xl bg-[#112239] hover:bg-[#162942] text-white border border-[#79C8E8]/30 transition-all font-semibold text-xs cursor-pointer"
-            title={t.switchLanguage}
-            aria-label={t.switchLanguage}
-          >
-            <Globe className="w-3.5 h-3.5 text-[#DFC57B]" />
-            <span>{lang === 'ar' ? 'Français' : 'العربية'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {isAdminPortalRoute && onNavigateToClientRoute && (
+              <button
+                type="button"
+                onClick={onNavigateToClientRoute}
+                className="h-9 hidden md:flex items-center gap-1.5 px-3 rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-300 hover:text-white border border-[#79C8E8]/25 text-xs font-semibold transition-colors cursor-pointer"
+                title={lang === 'ar' ? 'الرجوع إلى بوابة العملاء' : 'Retour au portail clients'}
+              >
+                {lang === 'ar' ? <ArrowRight className="w-3 h-3" /> : <ArrowLeft className="w-3 h-3" />}
+                <span>{lang === 'ar' ? 'بوابة العملاء' : 'Portail Clients'}</span>
+              </button>
+            )}
+
+            {/* Exactly ONE authoritative Language Switcher on the login screen */}
+            <button
+              type="button"
+              onClick={() => onLanguageChange(lang === 'ar' ? 'fr' : 'ar')}
+              className="h-9 flex items-center gap-2 px-3.5 rounded-xl bg-[#112239] hover:bg-[#162942] text-white border border-[#79C8E8]/30 transition-all font-semibold text-xs cursor-pointer shadow-sm"
+              title={t.switchLanguage}
+              aria-label={t.switchLanguage}
+            >
+              <Globe className="w-3.5 h-3.5 text-[#DFC57B]" />
+              <span>{lang === 'ar' ? 'Français' : 'العربية'}</span>
+            </button>
+          </div>
         </div>
       </header>
     );
