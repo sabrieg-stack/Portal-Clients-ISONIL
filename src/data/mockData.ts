@@ -2,19 +2,6 @@ import { User, Project, Attachment, PendingRegistration, NotificationItem, Backu
 
 export const INITIAL_USERS: User[] = [
   {
-    id: 'admin-1',
-    fullName: 'Direction ISONIL',
-    companyName: 'ISONIL Maroc',
-    email: 'contact@isonil.com',
-    phone: '+212710738409',
-    role: 'admin',
-    status: 'active',
-    createdAt: '2025-01-01T00:00:00Z',
-    assignedProjectIds: [],
-    city: 'El Jadida',
-    password: 'admin@isonil2025',
-  },
-  {
     id: 'client-1',
     fullName: 'Karim Bennani',
     companyName: 'Maroc Phosphore (Jorf Lasfar)',
@@ -50,11 +37,11 @@ export const INITIAL_ATTACHMENTS: Attachment[] = [
     id: 'att-demo-1',
     projectId: 'proj-demo-1',
     projectName: 'Projet Isolation Tuyauterie Vapeur HP',
+    clientId: 'client-1',
     title: 'Rapport de Réception Calorifuge - Ligne Vapeur HP',
     fileName: 'Rapport_Controle_Calorifuge_Vapeur.pdf',
     fileSizeBytes: 2450000,
-    fileType: 'pdf',
-    category: 'rapports',
+    category: 'document',
     uploadedAt: '2025-02-10T14:30:00Z',
     senderType: 'admin',
     senderName: 'Direction ISONIL Maroc',
@@ -67,11 +54,11 @@ export const INITIAL_ATTACHMENTS: Attachment[] = [
     id: 'att-demo-2',
     projectId: 'proj-demo-1',
     projectName: 'Projet Isolation Tuyauterie Vapeur HP',
+    clientId: 'client-1',
     title: 'Plans Isométriques et Calfeutrement Ligne 14-B',
     fileName: 'Plan_Isometric_Tuyauterie_Ligne14.jpg',
     fileSizeBytes: 4200000,
-    fileType: 'image',
-    category: 'plans',
+    category: 'photo',
     uploadedAt: '2025-02-12T11:15:00Z',
     senderType: 'admin',
     senderName: 'Direction ISONIL Maroc',
@@ -103,7 +90,7 @@ export const INITIAL_BACKUPS: BackupSnapshot[] = [
     sizeBytes: 1048576,
     projectsCount: 1,
     attachmentsCount: 2,
-    usersCount: 2,
+    usersCount: 1,
     note: 'Point de restauration initial système',
     payloadJson: JSON.stringify({ users: INITIAL_USERS, projects: INITIAL_PROJECTS, attachments: INITIAL_ATTACHMENTS, pending: [] }),
   },
@@ -125,18 +112,12 @@ export function loadStoredUsers(): User[] {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Guarantee presence of initial admin & client test accounts if not registered
-        let result = [...parsed];
-        const hasAdmin = result.some((u: User) => u.role === 'admin');
-        const hasClient = result.some((u: User) => u.role === 'client');
-        if (!hasAdmin) {
-          result.push(INITIAL_USERS[0]);
-        }
-        if (!hasClient && INITIAL_USERS[1]) {
-          result.push(INITIAL_USERS[1]);
-        }
-        return result;
+      if (Array.isArray(parsed)) {
+        // Remove any previously hardcoded placeholder admin-1 (contact@isonil.com) so no admin email is ever assumed
+        const cleaned = parsed.filter(
+          (u: User) => !(u.id === 'admin-1' && u.email?.toLowerCase() === 'contact@isonil.com' && u.password === 'admin@isonil2025')
+        );
+        return cleaned;
       }
     }
   } catch (e) {

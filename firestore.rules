@@ -1,0 +1,236 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Verify admin status from trusted /admins/{uid} document or verified project owner
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email_verified == true && request.auth.token.email == 'sabri.eg@gmail.com')
+      );
+    }
+
+    // Validation Blueprints
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'fullName', 'companyName', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'fullName', 'companyName', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 150 &&
+        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 150 &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 64;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'fullName', 'companyName', 'email', 'phone', 'role', 'status', 'createdAt', 'assignedProjectIds']) &&
+        data.keys().hasOnly(['id', 'uid', 'fullName', 'companyName', 'email', 'phone', 'role', 'status', 'createdAt', 'assignedProjectIds', 'city', 'notes', 'password']) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        (!('uid' in data) || (data.uid is string && data.uid.size() <= 128)) &&
+        data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 150 &&
+        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 150 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.phone is string && data.phone.size() >= 1 && data.phone.size() <= 40 &&
+        data.role is string && (data.role == 'client' || data.role == 'admin') &&
+        data.status is string && (data.status == 'active' || data.status == 'pending' || data.status == 'suspended') &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 64 &&
+        data.assignedProjectIds is list && data.assignedProjectIds.size() <= 100 &&
+        (data.assignedProjectIds.size() == 0 || (data.assignedProjectIds[0] is string && data.assignedProjectIds[0].size() <= 128)) &&
+        (!('city' in data) || (data.city is string && data.city.size() <= 100)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+        (!('password' in data) || (data.password is string && data.password.size() <= 128));
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'clientId', 'clientName', 'name', 'location', 'type', 'status', 'startDate', 'completionPercentage', 'totalStorageBytes', 'description']) &&
+        data.keys().hasOnly(['id', 'clientId', 'clientEmail', 'clientName', 'name', 'location', 'type', 'status', 'startDate', 'completionPercentage', 'totalStorageBytes', 'description']) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.clientId is string && data.clientId.size() >= 1 && data.clientId.size() <= 128 &&
+        (!('clientEmail' in data) || (data.clientEmail is string && data.clientEmail.size() <= 254)) &&
+        data.clientName is string && data.clientName.size() >= 1 && data.clientName.size() <= 150 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        data.location is string && data.location.size() >= 1 && data.location.size() <= 200 &&
+        data.type is string && data.type in ['tuyauterie', 'conduits', 'cuves', 'batiment', 'chaudieres', 'autre'] &&
+        data.status is string && data.status in ['in_progress', 'completed', 'maintenance'] &&
+        data.startDate is string && data.startDate.size() >= 1 && data.startDate.size() <= 40 &&
+        data.completionPercentage is number && data.completionPercentage >= 0 && data.completionPercentage <= 100 &&
+        data.totalStorageBytes is number && data.totalStorageBytes >= 0 &&
+        data.description is string && data.description.size() <= 2000;
+    }
+
+    function isValidAttachment(data) {
+      return data.keys().hasAll(['id', 'projectId', 'projectName', 'clientId', 'senderType', 'senderName', 'title', 'category', 'fileUrl', 'fileName', 'fileSizeBytes', 'uploadedAt']) &&
+        data.keys().hasOnly(['id', 'projectId', 'projectName', 'clientId', 'clientEmail', 'senderType', 'senderName', 'title', 'category', 'fileUrl', 'fileName', 'fileSizeBytes', 'uploadedAt', 'starred', 'notes', 'folder', 'previewType', 'downloadCount', 'videoMimeType', 'deletedAt', 'customSection']) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.projectId is string && data.projectId.size() >= 1 && data.projectId.size() <= 128 &&
+        data.projectName is string && data.projectName.size() >= 1 && data.projectName.size() <= 200 &&
+        data.clientId is string && data.clientId.size() >= 1 && data.clientId.size() <= 128 &&
+        (!('clientEmail' in data) || (data.clientEmail is string && data.clientEmail.size() <= 254)) &&
+        data.senderType is string && (data.senderType == 'client' || data.senderType == 'admin') &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 150 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+        data.category is string && data.category in ['photo', 'video', 'document', 'note', 'other'] &&
+        data.fileUrl is string && data.fileUrl.size() >= 1 && data.fileUrl.size() <= 900000 &&
+        data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 255 &&
+        data.fileSizeBytes is number && data.fileSizeBytes >= 0 &&
+        data.uploadedAt is string && data.uploadedAt.size() >= 1 && data.uploadedAt.size() <= 64 &&
+        (!('starred' in data) || data.starred is bool) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000)) &&
+        (!('folder' in data) || (data.folder is string && data.folder in ['inbox', 'sent', 'starred', 'trash'])) &&
+        (!('previewType' in data) || (data.previewType is string && data.previewType.size() <= 30)) &&
+        (!('downloadCount' in data) || data.downloadCount is number) &&
+        (!('videoMimeType' in data) || (data.videoMimeType is string && data.videoMimeType.size() <= 60)) &&
+        (!('deletedAt' in data) || (data.deletedAt is string && data.deletedAt.size() <= 64)) &&
+        (!('customSection' in data) || (data.customSection is string && data.customSection.size() <= 120));
+    }
+
+    function isValidPendingRegistration(data) {
+      return data.keys().hasAll(['id', 'fullName', 'companyName', 'email', 'phone', 'city', 'projectType', 'requestedAt']) &&
+        data.keys().hasOnly(['id', 'fullName', 'companyName', 'email', 'phone', 'city', 'projectType', 'requestedAt', 'notes', 'password', 'uid']) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 150 &&
+        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 150 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+        data.phone is string && data.phone.size() >= 1 && data.phone.size() <= 40 &&
+        data.city is string && data.city.size() >= 1 && data.city.size() <= 100 &&
+        data.projectType is string && data.projectType in ['tuyauterie', 'conduits', 'cuves', 'batiment', 'chaudieres', 'autre'] &&
+        data.requestedAt is string && data.requestedAt.size() >= 1 && data.requestedAt.size() <= 64 &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000)) &&
+        (!('password' in data) || (data.password is string && data.password.size() <= 128)) &&
+        (!('uid' in data) || (data.uid is string && data.uid.size() <= 128));
+    }
+
+    // 1. Admins Collection
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isSignedIn() && (isAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(adminUid) && isValidAdmin(incoming()) &&
+        incoming().uid == adminUid && (request.auth.uid == adminUid || isAdmin());
+      allow update: if isSignedIn() && isValidId(adminUid) && isValidAdmin(incoming()) && isAdmin() &&
+        incoming().uid == existing().uid && incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && isValidId(adminUid) && isAdmin();
+    }
+
+    // 2. Users Collection (PII protected: restricted to owner or admin)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (
+        isAdmin() ||
+        request.auth.uid == userId ||
+        resource.data.uid == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.uid == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+      );
+      allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() ||
+        (incoming().role == 'client' && incoming().status == 'pending' && incoming().id == userId)
+      );
+      allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() ||
+        (
+          (request.auth.uid == userId || resource.data.uid == request.auth.uid || (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)) &&
+          incoming().role == existing().role &&
+          incoming().status == existing().status &&
+          incoming().id == existing().id &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'password', 'phone', 'city', 'notes'])
+        )
+      );
+      allow delete: if isSignedIn() && isValidId(userId) && isAdmin();
+    }
+
+    // 3. Projects Collection
+    match /projects/{projectId} {
+      allow get: if isSignedIn() && isValidId(projectId) && (
+        isAdmin() ||
+        resource.data.clientId == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.clientId == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+      );
+      allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming()) && isAdmin();
+      allow update: if isSignedIn() && isValidId(projectId) && isValidProject(incoming()) && isAdmin() &&
+        incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(projectId) && isAdmin();
+    }
+
+    // 4. Attachments Collection
+    match /attachments/{attachmentId} {
+      allow get: if isSignedIn() && isValidId(attachmentId) && (
+        isAdmin() ||
+        resource.data.clientId == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.clientId == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+      );
+      allow create: if isSignedIn() && isValidId(attachmentId) && isValidAttachment(incoming()) && (
+        isAdmin() ||
+        incoming().clientId == request.auth.uid ||
+        (request.auth.token.email_verified == true && incoming().clientEmail == request.auth.token.email)
+      );
+      allow update: if isSignedIn() && isValidId(attachmentId) && isValidAttachment(incoming()) && (
+        isAdmin() ||
+        (
+          (resource.data.clientId == request.auth.uid || (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)) &&
+          incoming().id == existing().id &&
+          incoming().projectId == existing().projectId &&
+          incoming().clientId == existing().clientId &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['starred', 'folder', 'notes', 'downloadCount', 'deletedAt', 'customSection'])
+        )
+      );
+      allow delete: if isSignedIn() && isValidId(attachmentId) && (
+        isAdmin() ||
+        resource.data.clientId == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+      );
+    }
+
+    // 5. Pending Registrations Collection
+    match /pendingRegistrations/{registrationId} {
+      allow get: if isSignedIn() && isValidId(registrationId) && (
+        isAdmin() ||
+        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+      );
+      allow create: if isValidId(registrationId) && isValidPendingRegistration(incoming());
+      allow update: if isSignedIn() && isValidId(registrationId) && isValidPendingRegistration(incoming()) && isAdmin();
+      allow delete: if isSignedIn() && isValidId(registrationId) && isAdmin();
+    }
+  }
+}

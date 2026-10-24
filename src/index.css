@@ -15,29 +15,29 @@
   }
 
   body {
-    background-color: #0d1117;
-    color: #f1f5f9;
+    background-color: #0B192C;
+    color: #FFFFFF;
     overflow-x: hidden;
   }
 }
 
-/* 5 Theme color definitions */
+/* 5 Theme color definitions aligned with official ISONIL palette */
 html[data-theme="beige"], :root {
-  --theme-accent: #d4b996;
-  --theme-accent-hover: #c5a882;
+  --theme-accent: #DFC57B;
+  --theme-accent-hover: #d4b663;
   --theme-accent-light: #f5efe8;
-  --theme-accent-glow: rgba(212, 185, 150, 0.2);
-  --theme-accent-border: rgba(212, 185, 150, 0.4);
-  --theme-text-contrast: #0d1117;
+  --theme-accent-glow: rgba(223, 197, 123, 0.22);
+  --theme-accent-border: rgba(223, 197, 123, 0.45);
+  --theme-text-contrast: #0B192C;
 }
 
 html[data-theme="silver"] {
-  --theme-accent: #cbd5e1;
-  --theme-accent-hover: #94a3b8;
+  --theme-accent: #A9DDF1;
+  --theme-accent-hover: #79C8E8;
   --theme-accent-light: #f8fafc;
-  --theme-accent-glow: rgba(203, 213, 225, 0.25);
-  --theme-accent-border: rgba(203, 213, 225, 0.45);
-  --theme-text-contrast: #0f172a;
+  --theme-accent-glow: rgba(169, 221, 241, 0.22);
+  --theme-accent-border: rgba(169, 221, 241, 0.45);
+  --theme-text-contrast: #0B192C;
 }
 
 html[data-theme="bronze"] {
@@ -46,16 +46,16 @@ html[data-theme="bronze"] {
   --theme-accent-light: #fef3c7;
   --theme-accent-glow: rgba(245, 158, 11, 0.25);
   --theme-accent-border: rgba(245, 158, 11, 0.45);
-  --theme-text-contrast: #0f172a;
+  --theme-text-contrast: #0B192C;
 }
 
 html[data-theme="navy"] {
-  --theme-accent: #38bdf8;
-  --theme-accent-hover: #0284c7;
+  --theme-accent: #79C8E8;
+  --theme-accent-hover: #38bdf8;
   --theme-accent-light: #e0f2fe;
-  --theme-accent-glow: rgba(56, 189, 248, 0.25);
-  --theme-accent-border: rgba(56, 189, 248, 0.45);
-  --theme-text-contrast: #0f172a;
+  --theme-accent-glow: rgba(121, 200, 232, 0.25);
+  --theme-accent-border: rgba(121, 200, 232, 0.45);
+  --theme-text-contrast: #0B192C;
 }
 
 html[data-theme="emerald"] {
@@ -114,16 +114,16 @@ html[data-theme="emerald"] {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(13, 17, 23, 0.8);
+  background: rgba(11, 25, 44, 0.9);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--theme-accent-border, rgba(212, 185, 150, 0.25));
+  background: var(--theme-accent-border, rgba(223, 197, 123, 0.35));
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--theme-accent, rgba(212, 185, 150, 0.45));
+  background: var(--theme-accent, rgba(223, 197, 123, 0.6));
 }
 
 /* PRINT ENGINE FORMATTING */

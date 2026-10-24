@@ -28,18 +28,38 @@ import { MailboxWorkspace } from './components/MailboxWorkspace';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AttachmentViewerModal } from './components/AttachmentViewerModal';
 import { UploadModal } from './components/UploadModal';
+import {
+  auth,
+  onAuthStateChanged,
+  firebaseSignOut,
+  fetchVerifiedUserFromFirestore,
+  syncUserToFirestore,
+  syncProjectToFirestore,
+  syncAttachmentToFirestore,
+  deleteAttachmentFromFirestore,
+  syncPendingRegistrationToFirestore,
+  deletePendingRegistrationFromFirestore,
+} from './firebase';
 
 const THEME_HEX: Record<ThemeColor, { accent: string; hover: string; glow: string; border: string; contrast: string }> = {
-  beige: { accent: '#d4b996', hover: '#c5a882', glow: 'rgba(212, 185, 150, 0.25)', border: 'rgba(212, 185, 150, 0.45)', contrast: '#0d1117' },
-  silver: { accent: '#cbd5e1', hover: '#94a3b8', glow: 'rgba(203, 213, 225, 0.25)', border: 'rgba(203, 213, 225, 0.45)', contrast: '#0f172a' },
-  bronze: { accent: '#f59e0b', hover: '#d97706', glow: 'rgba(245, 158, 11, 0.25)', border: 'rgba(245, 158, 11, 0.45)', contrast: '#0f172a' },
-  navy: { accent: '#38bdf8', hover: '#0284c7', glow: 'rgba(56, 189, 248, 0.25)', border: 'rgba(56, 189, 248, 0.45)', contrast: '#0f172a' },
+  beige: { accent: '#DFC57B', hover: '#d4b663', glow: 'rgba(223, 197, 123, 0.22)', border: 'rgba(223, 197, 123, 0.45)', contrast: '#0B192C' },
+  silver: { accent: '#A9DDF1', hover: '#79C8E8', glow: 'rgba(169, 221, 241, 0.22)', border: 'rgba(169, 221, 241, 0.45)', contrast: '#0B192C' },
+  bronze: { accent: '#f59e0b', hover: '#d97706', glow: 'rgba(245, 158, 11, 0.25)', border: 'rgba(245, 158, 11, 0.45)', contrast: '#0B192C' },
+  navy: { accent: '#79C8E8', hover: '#38bdf8', glow: 'rgba(121, 200, 232, 0.25)', border: 'rgba(121, 200, 232, 0.45)', contrast: '#0B192C' },
   emerald: { accent: '#10b981', hover: '#059669', glow: 'rgba(16, 185, 129, 0.25)', border: 'rgba(16, 185, 129, 0.45)', contrast: '#ffffff' },
 };
 
 export default function App() {
-  // 1. Language state
-  const [lang, setLang] = useState<Language>('ar');
+  // 1. Language state persisted across sessions
+  const [lang, setLang] = useState<Language>(() => {
+    try {
+      const saved = localStorage.getItem('isonil_portal_lang_v1');
+      if (saved === 'ar' || saved === 'fr') return saved;
+    } catch {
+      // ignore
+    }
+    return 'ar';
+  });
 
   // 2. Cinematic Welcome Splash
   const [showCinematic, setShowCinematic] = useState<boolean>(true);
@@ -63,8 +83,8 @@ export default function App() {
     return loadVerifiedStoredSession();
   });
 
-  // 7. Admin active sub-view
-  const [activeAdminSubView, setActiveAdminSubView] = useState<'dashboard' | 'workspace'>('workspace');
+  // 7. Admin active sub-view: default to 'dashboard' for administrators
+  const [activeAdminSubView, setActiveAdminSubView] = useState<'dashboard' | 'workspace'>('dashboard');
 
   // 8. Modals
   const [selectedAttachmentForViewer, setSelectedAttachmentForViewer] = useState<Attachment | null>(null);
@@ -76,6 +96,11 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    try {
+      localStorage.setItem('isonil_portal_lang_v1', lang);
+    } catch {
+      // ignore
+    }
   }, [lang]);
 
   // Sync active theme color attribute & CSS custom variables dynamically
@@ -120,16 +145,82 @@ export default function App() {
     saveStoredBackups(backups);
   }, [backups]);
 
+  // Listen to Firebase Auth state changes and verify role strictly from Firestore / verified records
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) return;
+      try {
+        const verifiedRemoteUser = await fetchVerifiedUserFromFirestore(fbUser);
+        if (verifiedRemoteUser && verifiedRemoteUser.status === 'active') {
+          setUsers((prev) => {
+            const exists = prev.some(
+              (u) => u.id === verifiedRemoteUser.id || u.email.toLowerCase() === verifiedRemoteUser.email.toLowerCase()
+            );
+            if (exists) {
+              return prev.map((u) =>
+                u.id === verifiedRemoteUser.id || u.email.toLowerCase() === verifiedRemoteUser.email.toLowerCase()
+                  ? { ...u, ...verifiedRemoteUser, uid: fbUser.uid }
+                  : u
+              );
+            }
+            return [...prev, { ...verifiedRemoteUser, uid: fbUser.uid }];
+          });
+          setCurrentUser((prevCurrent) => {
+            if (prevCurrent && prevCurrent.email.toLowerCase() === verifiedRemoteUser.email.toLowerCase()) {
+              return prevCurrent;
+            }
+            const verifiedRole = verifiedRemoteUser.role === 'admin' ? 'admin' : 'client';
+            saveStoredCurrentSession({
+              userId: verifiedRemoteUser.id,
+              email: verifiedRemoteUser.email,
+              role: verifiedRole,
+              loginAt: new Date().toISOString(),
+            });
+            if (verifiedRole === 'admin') {
+              setActiveAdminSubView('dashboard');
+            }
+            return {
+              ...verifiedRemoteUser,
+              role: verifiedRole,
+            };
+          });
+        }
+      } catch (err) {
+        console.error('Error verifying Firebase session:', err);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Handler: Language switch
   const handleLanguageChange = (newLang: Language) => {
     setLang(newLang);
   };
 
-  // Handler: Login Success (determines role from authenticated account and verified permissions)
+  // Handler: Register or Link Admin Account
+  const handleRegisterAdminAccount = (adminUser: User) => {
+    setUsers((prev) => {
+      const emailLower = adminUser.email.trim().toLowerCase();
+      const exists = prev.some(
+        (u) => u.id === adminUser.id || u.email.trim().toLowerCase() === emailLower
+      );
+      if (exists) {
+        return prev.map((u) =>
+          u.id === adminUser.id || u.email.trim().toLowerCase() === emailLower
+            ? { ...u, ...adminUser, role: 'admin', status: 'active' }
+            : u
+        );
+      }
+      return [{ ...adminUser, role: 'admin', status: 'active' }, ...prev];
+    });
+  };
+
+  // Handler: Login Success (determines role strictly from authenticated account and verified permissions)
   const handleLoginSuccess = (user: User) => {
-    // Re-verify against users store to ensure verified role permissions
-    const verified = users.find((u) => u.id === user.id && u.email.toLowerCase() === user.email.toLowerCase());
-    const validUser = verified || user;
+    const verified = users.find(
+      (u) => u.id === user.id || u.email.trim().toLowerCase() === user.email.trim().toLowerCase()
+    );
+    const validUser = verified ? { ...verified, ...user, role: verified.role } : user;
     const authenticatedUser: User = {
       ...validUser,
       role: validUser.role === 'admin' ? 'admin' : 'client',
@@ -140,12 +231,20 @@ export default function App() {
       role: authenticatedUser.role,
       loginAt: new Date().toISOString(),
     });
+    if (authenticatedUser.role === 'admin') {
+      setActiveAdminSubView('dashboard');
+    }
     setCurrentUser(authenticatedUser);
     setShowAuthModalManually(false);
   };
 
-  // Handler: Logout (clears session and returns to login modal)
-  const handleLogout = () => {
+  // Handler: Logout (clears local & Firebase session and returns to login screen)
+  const handleLogout = async () => {
+    try {
+      await firebaseSignOut(auth);
+    } catch {
+      // ignore sign-out error
+    }
     saveStoredCurrentSession(null);
     setCurrentUser(null);
     setShowAuthModalManually(true);
@@ -157,9 +256,15 @@ export default function App() {
     setUsers((prev) => {
       const exists = prev.some((u) => u.email.toLowerCase() === emailTrim);
       if (exists) {
-        return prev.map((u) => (u.email.toLowerCase() === emailTrim ? { ...u, password: newPass } : u));
+        return prev.map((u) => {
+          if (u.email.toLowerCase() === emailTrim) {
+            const updated = { ...u, password: newPass };
+            syncUserToFirestore(updated, updated.uid).catch(() => {});
+            return updated;
+          }
+          return u;
+        });
       } else {
-        // Create client user record with updated password if not registered yet
         const newUser: User = {
           id: `client-${Date.now()}`,
           fullName: emailTrim.split('@')[0],
@@ -172,11 +277,11 @@ export default function App() {
           assignedProjectIds: [],
           password: newPass,
         };
+        syncUserToFirestore(newUser).catch(() => {});
         return [...prev, newUser];
       }
     });
 
-    // Push notification
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: lang === 'ar' ? 'تم تحديث كلمة المرور' : 'Mot de passe mis à jour',
@@ -198,8 +303,8 @@ export default function App() {
       ...data,
     };
     setPendingRegistrations((prev) => [newPending, ...prev]);
+    syncPendingRegistrationToFirestore(newPending).catch(() => {});
 
-    // Push notification for admin
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
       title: lang === 'ar' ? `طلب فتح حساب جديد: ${data.companyName}` : `Nouvelle demande d'accès: ${data.companyName}`,
@@ -221,6 +326,8 @@ export default function App() {
       ...projectData,
     };
     setProjects((prev) => [newProject, ...prev]);
+    const assignedClient = users.find((u) => u.id === newProject.clientId);
+    syncProjectToFirestore(newProject, assignedClient?.email).catch(() => {});
 
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
@@ -236,7 +343,7 @@ export default function App() {
     setNotifications((prev) => [notif, ...prev]);
   };
 
-  // Handler: Admin approves account
+  // Handler: Admin approves account (preserves client password and syncs to Firestore)
   const handleApproveAccount = (registrationId: string) => {
     const targetPending = pendingRegistrations.find((p) => p.id === registrationId);
     if (!targetPending) return;
@@ -270,11 +377,16 @@ export default function App() {
       assignedProjectIds: [newProjectId],
       city: targetPending.city,
       notes: targetPending.notes,
+      ...(targetPending.password ? { password: targetPending.password } : {}),
     };
 
     setUsers((prev) => [...prev, newClientUser]);
     setProjects((prev) => [...prev, newProject]);
     setPendingRegistrations((prev) => prev.filter((p) => p.id !== registrationId));
+
+    syncUserToFirestore(newClientUser).catch(() => {});
+    syncProjectToFirestore(newProject, newClientUser.email).catch(() => {});
+    deletePendingRegistrationFromFirestore(registrationId).catch(() => {});
 
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
@@ -292,11 +404,14 @@ export default function App() {
   // Handler: Admin rejects account
   const handleRejectAccount = (registrationId: string) => {
     setPendingRegistrations((prev) => prev.filter((p) => p.id !== registrationId));
+    deletePendingRegistrationFromFirestore(registrationId).catch(() => {});
   };
 
   // Handler: Upload/Publish new attachment
   const handleUploadSuccess = (newAttachment: Attachment) => {
     setAttachments((prev) => [newAttachment, ...prev]);
+    const assignedClient = users.find((u) => u.id === newAttachment.clientId);
+    syncAttachmentToFirestore(newAttachment, assignedClient?.email).catch(() => {});
 
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
@@ -316,14 +431,38 @@ export default function App() {
   // Handler: Toggle Star
   const handleToggleStar = (attachmentId: string) => {
     setAttachments((prev) =>
-      prev.map((att) => (att.id === attachmentId ? { ...att, starred: !att.starred } : att))
+      prev.map((att) => {
+        if (att.id === attachmentId) {
+          const updated = { ...att, starred: !att.starred };
+          const assignedClient = users.find((u) => u.id === updated.clientId);
+          syncAttachmentToFirestore(updated, assignedClient?.email).catch(() => {});
+          return updated;
+        }
+        return att;
+      })
     );
   };
 
-  // Handler: Delete attachment (زر حذف المرفق)
+  // Handler: Soft-delete to 30-day recovery trash, or permanently delete if already in trash
   const handleDeleteAttachment = (attachmentId: string) => {
     const target = attachments.find((a) => a.id === attachmentId);
-    setAttachments((prev) => prev.filter((att) => att.id !== attachmentId));
+    if (!target) return;
+
+    if (target.folder === 'trash') {
+      // Permanent delete
+      setAttachments((prev) => prev.filter((att) => att.id !== attachmentId));
+      deleteAttachmentFromFirestore(attachmentId).catch(() => {});
+    } else {
+      // Soft delete (recoverable for 30 days)
+      const trashed: Attachment = {
+        ...target,
+        folder: 'trash',
+        deletedAt: new Date().toISOString(),
+      };
+      setAttachments((prev) => prev.map((att) => (att.id === attachmentId ? trashed : att)));
+      const assignedClient = users.find((u) => u.id === trashed.clientId);
+      syncAttachmentToFirestore(trashed, assignedClient?.email).catch(() => {});
+    }
 
     if (selectedAttachmentForViewer?.id === attachmentId) {
       setSelectedAttachmentForViewer(null);
@@ -331,15 +470,37 @@ export default function App() {
 
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
-      title: lang === 'ar' ? 'تم حذف المرفق' : 'Pièce jointe supprimée',
+      title:
+        target.folder === 'trash'
+          ? (lang === 'ar' ? 'تم الحذف النهائي للمرفق' : 'Fichier supprimé définitivement')
+          : (lang === 'ar' ? 'تم نقل المرفق إلى سلة المحذوفات (30 يوماً)' : 'Fichier déplacé dans la corbeille (30j)'),
       message: lang === 'ar' 
-        ? `تم حذف ${target?.title || 'المرفق'} بنجاح من الأرشيف الرقمي.`
-        : `Document supprimé avec succès de l'archive.`,
+        ? `الملف "${target.title}" متاح للاستعادة لمدة 30 يوماً قبل الحذف النهائي.`
+        : `Le fichier "${target.title}" reste récupérable pendant 30 jours.`,
       date: new Date().toISOString(),
       read: false,
       type: 'system',
     };
     setNotifications((prev) => [notif, ...prev]);
+  };
+
+  // Handler: Restore attachment from 30-day trash
+  const handleRestoreAttachment = (attachmentId: string) => {
+    setAttachments((prev) =>
+      prev.map((att) => {
+        if (att.id === attachmentId) {
+          const restored: Attachment = {
+            ...att,
+            folder: att.senderType === 'admin' ? 'inbox' : 'sent',
+            deletedAt: undefined,
+          };
+          const assignedClient = users.find((u) => u.id === restored.clientId);
+          syncAttachmentToFirestore(restored, assignedClient?.email).catch(() => {});
+          return restored;
+        }
+        return att;
+      })
+    );
   };
 
   // Handler: Forward attachment
@@ -454,15 +615,20 @@ export default function App() {
   const clientProjects = React.useMemo(() => {
     if (!currentUser) return [];
     if (currentUser.role === 'admin') return projects;
-    return projects.filter((p) => currentUser.assignedProjectIds.includes(p.id));
+    return projects.filter(
+      (p) =>
+        currentUser.assignedProjectIds.includes(p.id) ||
+        p.clientId === currentUser.id
+    );
   }, [currentUser, projects]);
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-slate-100 flex flex-col font-sans selection:bg-theme selection:text-slate-950">
+    <div className="min-h-screen bg-[#0B192C] text-white flex flex-col font-sans selection:bg-[#DFC57B] selection:text-[#0B192C]">
       {/* 1. CINEMATIC WELCOME SCREEN */}
       {showCinematic && (
         <CinematicWelcome
           lang={lang}
+          onLanguageChange={handleLanguageChange}
           onFinish={() => setShowCinematic(false)}
         />
       )}
@@ -472,6 +638,9 @@ export default function App() {
         lang={lang}
         onLanguageChange={handleLanguageChange}
         currentUser={currentUser}
+        isAuthScreen={!currentUser || showAuthModalManually}
+        activeAdminSubView={activeAdminSubView}
+        onAdminSubViewChange={setActiveAdminSubView}
         onLogout={handleLogout}
         onShowAuthModal={() => setShowAuthModalManually(true)}
         canGoBack={currentUser !== null && currentUser.role === 'admin' && activeAdminSubView === 'dashboard'}
@@ -490,46 +659,16 @@ export default function App() {
         {!currentUser || showAuthModalManually ? (
           <AuthModal
             lang={lang}
+            onLanguageChange={handleLanguageChange}
             users={users}
+            pendingRegistrations={pendingRegistrations}
             onLoginSuccess={handleLoginSuccess}
+            onRegisterAdminAccount={handleRegisterAdminAccount}
             onRequestAccount={handleRequestAccount}
             onUpdateUserPassword={handleUpdateUserPassword}
           />
         ) : currentUser.role === 'admin' ? (
           <div>
-            {/* Admin Switcher Bar between Workspace and Management Console */}
-            <div className="bg-[#161b22] border-b border-[#30363d] px-4 md:px-8 py-2.5">
-              <div className="max-w-7xl mx-auto flex items-center justify-between text-xs">
-                <span className="font-semibold theme-text flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-theme animate-pulse" />
-                  <span>{lang === 'ar' ? 'جلسة إدارة مركزية — إيزونيل المغرب' : 'Session Direction ISONIL Maroc'}</span>
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setActiveAdminSubView('workspace')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      activeAdminSubView === 'workspace'
-                        ? 'theme-btn font-bold shadow-md'
-                        : 'bg-[#0d1117] text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    {lang === 'ar' ? 'بوابة المرفقات ونماذج العرض' : 'Boîte Fichiers & Modèles'}
-                  </button>
-                  <button
-                    onClick={() => setActiveAdminSubView('dashboard')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      activeAdminSubView === 'dashboard'
-                        ? 'theme-btn font-bold shadow-md'
-                        : 'bg-[#0d1117] text-slate-300 hover:text-white'
-                    }`}
-                  >
-                    {lang === 'ar' ? 'لوحة القيادة والمشاريع والنسخ الاحتياطي' : 'Tableau de bord & Sauvegardes'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {activeAdminSubView === 'dashboard' ? (
               <AdminDashboard
                 lang={lang}
@@ -561,6 +700,7 @@ export default function App() {
                 }}
                 onToggleStar={handleToggleStar}
                 onDeleteAttachment={handleDeleteAttachment}
+                onRestoreAttachment={handleRestoreAttachment}
                 onCreateNewProject={() => setActiveAdminSubView('dashboard')}
               />
             )}
@@ -581,6 +721,7 @@ export default function App() {
             }}
             onToggleStar={handleToggleStar}
             onDeleteAttachment={handleDeleteAttachment}
+            onRestoreAttachment={handleRestoreAttachment}
           />
         )}
       </main>
@@ -610,14 +751,14 @@ export default function App() {
       )}
 
       {/* 6. CORPORATE FOOTER */}
-      <footer className="border-t border-[#21262d] bg-[#0d1117] py-6 px-4 md:px-8 text-xs text-slate-500">
+      <footer className="border-t border-[#79C8E8]/20 bg-[#0B192C] py-6 px-4 md:px-8 text-xs text-slate-300">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-400">ISONIL Maroc</span>
+            <span className="font-bold text-[#DFC57B]">ISONIL Maroc</span>
             <span>·</span>
-            <span>{translations[lang].companySubtitle}</span>
+            <span className="text-[#A9DDF1]">{translations[lang].companySubtitle}</span>
           </div>
-          <div className="flex items-center gap-4 text-[11px] font-mono text-slate-500">
+          <div className="flex items-center gap-4 text-[11px] font-mono text-slate-300">
             <span>Centre Andalousie, El Jadida</span>
             <span>·</span>
             <span>contact@isonil.com</span>

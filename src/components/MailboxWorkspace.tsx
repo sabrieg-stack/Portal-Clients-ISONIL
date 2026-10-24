@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Inbox, 
   Send, 
@@ -16,24 +16,19 @@ import {
   FolderPlus,
   PanelLeftClose,
   PanelLeft,
-  Calendar,
-  Sparkles,
-  Layers,
-  ArrowUpDown,
-  Download,
   Share2,
   Clock,
-  ChevronDown,
-  Info,
   ChevronRight,
-  ExternalLink,
   Film,
   FileCheck2,
   FolderOpen,
-  ArrowRight
+  ArrowRight,
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { Attachment, AttachmentCategory, Language, MailboxFolder, Project, User, LayoutModel } from '../types';
 import { translations } from '../i18n/translations';
+import { triggerNativeShare } from '../firebase';
 
 interface MailboxWorkspaceProps {
   lang: Language;
@@ -46,8 +41,13 @@ interface MailboxWorkspaceProps {
   onOpenUpload: (projectId?: string) => void;
   onToggleStar: (attachmentId: string) => void;
   onDeleteAttachment: (attachmentId: string) => void;
+  onRestoreAttachment?: (attachmentId: string) => void;
   onCreateNewProject?: () => void;
+  customFolders?: string[];
+  onAddCustomFolder?: (folderName: string) => void;
 }
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
   lang,
@@ -55,12 +55,13 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
   clientProjects,
   attachments,
   layoutModel,
-  onLayoutChange,
   onOpenViewer,
   onOpenUpload,
   onToggleStar,
   onDeleteAttachment,
-  onCreateNewProject,
+  onRestoreAttachment,
+  customFolders: propCustomFolders,
+  onAddCustomFolder,
 }) => {
   const t = translations[lang];
 
@@ -68,15 +69,52 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<AttachmentCategory | 'all'>('all');
   const [activeFolder, setActiveFolder] = useState<MailboxFolder | 'starred'>('inbox');
+  const [selectedCustomSection, setSelectedCustomSection] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'size'>('date-desc');
+  const [sortBy] = useState<'date-desc' | 'date-asc' | 'size'>('date-desc');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [customFolders, setCustomFolders] = useState<string[]>([]);
+  const [localCustomFolders, setLocalCustomFolders] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('isonil_portal_custom_folders_v1');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
   // In Model 3 (Grid): active project dossier filter (if user clicked on a project card)
   const [gridActiveProjectId, setGridActiveProjectId] = useState<string | null>(null);
+
+  const customFolders = useMemo(() => {
+    const combined = new Set<string>([...localCustomFolders, ...(propCustomFolders || [])]);
+    attachments.forEach((a) => {
+      if (a.customSection) combined.add(a.customSection);
+    });
+    return Array.from(combined);
+  }, [localCustomFolders, propCustomFolders, attachments]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('isonil_portal_custom_folders_v1', JSON.stringify(localCustomFolders));
+    } catch {
+      // ignore storage errors
+    }
+  }, [localCustomFolders]);
+
+  const handleCreateCustomFolder = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = newFolderName.trim();
+    if (!clean) return;
+    if (!localCustomFolders.includes(clean)) {
+      setLocalCustomFolders((prev) => [...prev, clean]);
+    }
+    if (onAddCustomFolder) onAddCustomFolder(clean);
+    setSelectedCustomSection(clean);
+    setNewFolderName('');
+    setShowNewFolderModal(false);
+  };
 
   const formatBytes = (bytes: number): string => {
     if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} Go`;
@@ -84,12 +122,28 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
     return `${(bytes / 1024).toFixed(1)} Ko`;
   };
 
+  const getRemainingRecoveryDays = (deletedAt?: string): number => {
+    if (!deletedAt) return 30;
+    const elapsed = Date.now() - new Date(deletedAt).getTime();
+    return Math.max(0, Math.ceil((THIRTY_DAYS_MS - elapsed) / (24 * 60 * 60 * 1000)));
+  };
+
+  const isRecoverableInTrash = (att: Attachment): boolean => {
+    if (att.folder !== 'trash') return false;
+    return getRemainingRecoveryDays(att.deletedAt) > 0;
+  };
+
   const clientProjectIds = useMemo(() => new Set(clientProjects.map((p) => p.id)), [clientProjects]);
 
-  // Strict Bidirectional mail logic
+  // Strict Bidirectional mail logic + 30-day Trash support
   const isAttachmentInFolder = (att: Attachment, folder: MailboxFolder | 'starred'): boolean => {
+    if (folder === 'trash') {
+      return isRecoverableInTrash(att);
+    }
+    // Exclude trashed items from regular folders
+    if (att.folder === 'trash') return false;
+
     if (folder === 'starred') return !!att.starred;
-    if (folder === 'trash') return false;
 
     if (currentUser.role === 'admin') {
       if (folder === 'inbox') return att.senderType === 'client';
@@ -107,6 +161,7 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
       if (selectedProjectId !== 'all' && att.projectId !== selectedProjectId) return false;
       if (gridActiveProjectId && att.projectId !== gridActiveProjectId) return false;
       if (selectedCategory !== 'all' && att.category !== selectedCategory) return false;
+      if (selectedCustomSection && att.customSection !== selectedCustomSection) return false;
       if (!isAttachmentInFolder(att, activeFolder)) return false;
 
       if (searchQuery.trim()) {
@@ -125,7 +180,7 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
       if (sortBy === 'size') return b.fileSizeBytes - a.fileSizeBytes;
       return 0;
     });
-  }, [attachments, clientProjectIds, selectedProjectId, gridActiveProjectId, selectedCategory, activeFolder, searchQuery, sortBy, currentUser.role]);
+  }, [attachments, clientProjectIds, selectedProjectId, gridActiveProjectId, selectedCategory, selectedCustomSection, activeFolder, searchQuery, sortBy, currentUser.role]);
 
   // Counts for folders
   const folderCounts = useMemo(() => {
@@ -133,10 +188,28 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
     return {
       inbox: accessible.filter((a) => isAttachmentInFolder(a, 'inbox')).length,
       sent: accessible.filter((a) => isAttachmentInFolder(a, 'sent')).length,
-      starred: accessible.filter((a) => a.starred).length,
-      trash: 0,
+      starred: accessible.filter((a) => isAttachmentInFolder(a, 'starred')).length,
+      trash: accessible.filter((a) => isAttachmentInFolder(a, 'trash')).length,
     };
   }, [attachments, clientProjectIds, currentUser.role]);
+
+  const handleQuickShare = async (e: React.MouseEvent, att: Attachment) => {
+    e.stopPropagation();
+    const normalizedUrl =
+      !att.fileUrl || att.fileUrl.includes('/public/assets/aistudio/1000127391_10ae27f3.jpg')
+        ? '/1000127391_10ae27f3.jpg'
+        : att.fileUrl;
+    const res = await triggerNativeShare({
+      title: att.title,
+      text: `${att.title} — ${att.projectName} (ISONIL Maroc)`,
+      url: window.location.origin,
+      fileUrl: normalizedUrl,
+      fileName: att.fileName,
+    });
+    if (res.fallback) {
+      onOpenViewer(att);
+    }
+  };
 
   // Visual type badge component
   const renderVisualBadge = (category: AttachmentCategory, fileName: string) => {
@@ -176,11 +249,15 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
   // Thumbnail preview box component
   const renderThumbnailBox = (att: Attachment, sizeClass: string = "w-14 h-14") => {
     const isVid = att.category === 'video' || att.fileName.endsWith('.mp4') || att.fileName.endsWith('.mov') || att.fileName.endsWith('.avi') || att.fileName.endsWith('.mkv');
+    const resolvedThumb =
+      !att.fileUrl || att.fileUrl.includes('/public/assets/aistudio/1000127391_10ae27f3.jpg')
+        ? '/1000127391_10ae27f3.jpg'
+        : att.fileUrl;
     return (
-      <div className={`relative ${sizeClass} rounded-xl bg-black border border-[#30363d] overflow-hidden flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
+      <div className={`relative ${sizeClass} rounded-xl bg-black border border-[#79C8E8]/30 overflow-hidden flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
         {att.category === 'photo' ? (
           <img 
-            src={att.fileUrl || '/public/assets/aistudio/1000127391_10ae27f3.jpg'} 
+            src={resolvedThumb} 
             alt={att.title} 
             className="w-full h-full object-cover" 
           />
@@ -194,12 +271,12 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
             </span>
           </div>
         ) : att.category === 'document' ? (
-          <div className="w-full h-full bg-gradient-to-br from-red-950/70 to-[#0d1117] flex flex-col items-center justify-center p-1 text-center">
+          <div className="w-full h-full bg-gradient-to-br from-red-950/70 to-[#0B192C] flex flex-col items-center justify-center p-1 text-center">
             <FileText className="w-5 h-5 text-red-400" />
             <span className="text-[8px] font-mono font-bold text-red-300 mt-0.5">PDF</span>
           </div>
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-amber-950/70 to-[#0d1117] flex items-center justify-center">
+          <div className="w-full h-full bg-gradient-to-br from-amber-950/70 to-[#0B192C] flex items-center justify-center">
             <FileCheck2 className="w-5 h-5 text-amber-400" />
           </div>
         )}
@@ -210,72 +287,16 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       
-      {/* 1. PERSISTENT 5-MODEL SELECTOR DROPDOWN & BIDIRECTIONAL NOTICE */}
-      <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 shadow-xl">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 theme-text" />
-              <h3 className="text-xs md:text-sm font-bold text-white uppercase tracking-wider">
-                {t.layoutModelsTitle}
-              </h3>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              {layoutModel === 'horizontal' && t.layoutDescHorizontal}
-              {layoutModel === 'sidebar' && t.layoutDescSidebar}
-              {layoutModel === 'grid' && t.layoutDescGrid}
-              {layoutModel === 'timeline' && t.layoutDescTimeline}
-              {layoutModel === 'compact' && t.layoutDescCompact}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <select
-                value={layoutModel}
-                onChange={(e) => onLayoutChange(e.target.value as LayoutModel)}
-                className="bg-[#0d1117] border border-[#30363d] theme-text text-xs font-bold rounded-xl px-4 py-2 focus:outline-none focus:border-theme cursor-pointer pe-9 appearance-none shadow-md"
-              >
-                <option value="horizontal">{t.layoutHorizontal}</option>
-                <option value="sidebar">{t.layoutSidebar}</option>
-                <option value="grid">{t.layoutGrid}</option>
-                <option value="timeline">{t.layoutTimeline}</option>
-                <option value="compact">{t.layoutCompact}</option>
-              </select>
-              <ChevronDown className="w-4 h-4 theme-text absolute top-1/2 -translate-y-1/2 end-3 pointer-events-none" />
-            </div>
-
-            {/* "نشر" Button (Replaced from 'إرفاق ملف جديد') */}
-            <button
-              onClick={() => onOpenUpload(selectedProjectId !== 'all' ? selectedProjectId : undefined)}
-              className="flex items-center gap-2 py-2 px-5 rounded-xl theme-btn font-bold text-xs shadow-md transition-all cursor-pointer shrink-0"
-              title={t.newAttachment}
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t.newAttachment}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Bidirectional Mail Info Banner */}
-        <div className="mt-3.5 pt-3 border-t border-[#21262d] flex items-center gap-2 text-xs text-slate-400">
-          <Info className="w-4 h-4 theme-text shrink-0" />
-          <span>
-            {currentUser.role === 'admin' ? t.bidirectionalNoticeAdmin : t.bidirectionalNoticeClient}
-          </span>
-        </div>
-      </div>
-
-      {/* 2. UPPER FILTER BAR: Projects & Categories */}
-      <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 shadow-xl">
+      {/* 1. UPPER FILTER BAR: Projects, Categories & Publish Action */}
+      <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-4 shadow-xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#21262d] theme-border border flex items-center justify-center theme-text shrink-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#0B192C] border border-[#DFC57B]/40 flex items-center justify-center text-[#DFC57B] shrink-0">
               <Building2 className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <label className="block text-[11px] font-semibold text-slate-400 mb-0.5">
+              <label className="block text-[11px] font-semibold text-[#A9DDF1] mb-0.5">
                 {t.filterByProject}
               </label>
               <select
@@ -284,7 +305,7 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                   setSelectedProjectId(e.target.value);
                   setGridActiveProjectId(null);
                 }}
-                className="bg-[#0d1117] border border-[#30363d] text-slate-100 text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:border-theme cursor-pointer min-w-[240px]"
+                className="bg-[#0B192C] border border-[#79C8E8]/30 text-white text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#DFC57B] cursor-pointer min-w-[230px]"
               >
                 <option value="all">{t.allProjects} ({clientProjects.length})</option>
                 {clientProjects.map((p) => (
@@ -294,50 +315,75 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                 ))}
               </select>
             </div>
+
+            {selectedCustomSection && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0B192C] border border-[#DFC57B]/40 text-[#DFC57B] text-xs font-semibold">
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>{selectedCustomSection}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCustomSection(null)}
+                  className="ms-1 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-[#0d1117] rounded-xl border border-[#30363d]">
-            {[
-              { id: 'all', label: t.categoryAll, icon: Filter },
-              { id: 'photo', label: t.categoryPhoto, icon: ImageIcon },
-              { id: 'video', label: t.categoryVideo, icon: Video },
-              { id: 'document', label: t.categoryDocument, icon: FileText },
-              { id: 'note', label: t.categoryNote, icon: FileText },
-              { id: 'other', label: t.categoryOther, icon: FileQuestion },
-            ].map((cat) => {
-              const Icon = cat.icon;
-              const isActive = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id as AttachmentCategory | 'all')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    isActive
-                      ? 'theme-btn font-bold shadow-md'
-                      : 'text-slate-300 hover:text-white hover:bg-[#21262d]'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{cat.label}</span>
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-[#0B192C] rounded-xl border border-[#79C8E8]/25">
+              {[
+                { id: 'all', label: t.categoryAll, icon: Filter },
+                { id: 'photo', label: t.categoryPhoto, icon: ImageIcon },
+                { id: 'video', label: t.categoryVideo, icon: Video },
+                { id: 'document', label: t.categoryDocument, icon: FileText },
+                { id: 'note', label: t.categoryNote, icon: FileText },
+                { id: 'other', label: t.categoryOther, icon: FileQuestion },
+              ].map((cat) => {
+                const Icon = cat.icon;
+                const isActive = selectedCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id as AttachmentCategory | 'all')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#DFC57B] text-[#0B192C] font-bold shadow-md'
+                        : 'text-slate-200 hover:text-white hover:bg-[#162942]'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => onOpenUpload(selectedProjectId !== 'all' ? selectedProjectId : undefined)}
+              className="flex items-center gap-2 py-2 px-4 rounded-xl bg-[#DFC57B] hover:bg-[#d4b663] text-[#0B192C] font-bold text-xs shadow-md transition-all cursor-pointer shrink-0"
+              title={t.newAttachment}
+            >
+              <Plus className="w-4 h-4" />
+              <span>{t.newAttachment}</span>
+            </button>
           </div>
 
         </div>
       </div>
 
-      {/* 3. LAYOUT MODEL 1: HORIZONTAL STREAM (النمط الرأسي العلوي) */}
+      {/* 3. LAYOUT MODEL 1: HORIZONTAL STREAM */}
       {layoutModel === 'horizontal' && (
         <div className="space-y-4">
-          <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-3 shadow-md flex flex-wrap items-center justify-between gap-3">
+          <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-3 shadow-md flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setActiveFolder('inbox')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeFolder === 'inbox'
-                    ? 'theme-btn font-bold shadow-md'
-                    : 'bg-[#0d1117] text-slate-300 hover:bg-[#21262d]'
+                    ? 'bg-[#DFC57B] text-[#0B192C] font-bold shadow-md'
+                    : 'bg-[#0B192C] text-slate-200 hover:bg-[#162942]'
                 }`}
               >
                 <Inbox className="w-4 h-4" />
@@ -351,8 +397,8 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                 onClick={() => setActiveFolder('sent')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeFolder === 'sent'
-                    ? 'theme-btn font-bold shadow-md'
-                    : 'bg-[#0d1117] text-slate-300 hover:bg-[#21262d]'
+                    ? 'bg-[#DFC57B] text-[#0B192C] font-bold shadow-md'
+                    : 'bg-[#0B192C] text-slate-200 hover:bg-[#162942]'
                 }`}
               >
                 <Send className={`w-4 h-4 ${lang === 'ar' ? 'rotate-180' : ''}`} />
@@ -366,8 +412,8 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                 onClick={() => setActiveFolder('starred')}
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeFolder === 'starred'
-                    ? 'theme-btn font-bold shadow-md'
-                    : 'bg-[#0d1117] text-slate-300 hover:bg-[#21262d]'
+                    ? 'bg-[#DFC57B] text-[#0B192C] font-bold shadow-md'
+                    : 'bg-[#0B192C] text-slate-200 hover:bg-[#162942]'
                 }`}
               >
                 <Star className="w-4 h-4 text-amber-400" />
@@ -376,16 +422,31 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                   {folderCounts.starred}
                 </span>
               </button>
+
+              <button
+                onClick={() => setActiveFolder('trash')}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  activeFolder === 'trash'
+                    ? 'bg-[#E50914] text-white font-bold shadow-md'
+                    : 'bg-[#0B192C] text-slate-200 hover:bg-[#162942]'
+                }`}
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{t.trash} (30j)</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
+                  {folderCounts.trash}
+                </span>
+              </button>
             </div>
 
             <div className="relative w-full sm:max-w-xs">
-              <Search className={`w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 ${lang === 'ar' ? 'right-3' : 'left-3'}`} />
+              <Search className={`w-4 h-4 text-[#79C8E8] absolute top-1/2 -translate-y-1/2 ${lang === 'ar' ? 'right-3' : 'left-3'}`} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.searchPlaceholder}
-                className={`w-full py-1.5 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-theme ${
+                className={`w-full py-1.5 bg-[#0B192C] border border-[#79C8E8]/30 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-[#DFC57B] ${
                   lang === 'ar' ? 'pr-9 pl-3' : 'pl-9 pr-3'
                 }`}
               />
@@ -393,19 +454,19 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
           </div>
 
           {/* List with Thumbnails and Visual Badges */}
-          <div className="bg-[#161b22] border border-[#30363d] rounded-2xl shadow-xl overflow-hidden divide-y divide-[#21262d]">
+          <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl shadow-xl overflow-hidden divide-y divide-[#79C8E8]/15">
             {filteredAttachments.length === 0 ? (
-              <div className="py-16 text-center text-slate-500">
-                <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-slate-400" />
-                <p className="text-sm font-semibold text-slate-400">{t.noAttachmentsFound}</p>
-                <p className="text-xs text-slate-500 mt-1">{t.noAttachmentsSub}</p>
+              <div className="py-16 text-center text-slate-400">
+                <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-[#79C8E8]" />
+                <p className="text-sm font-semibold text-white">{t.noAttachmentsFound}</p>
+                <p className="text-xs text-[#A9DDF1] mt-1">{t.noAttachmentsSub}</p>
               </div>
             ) : (
               filteredAttachments.map((att) => (
                 <div
                   key={att.id}
                   onClick={() => onOpenViewer(att)}
-                  className="p-3 sm:p-4 hover:bg-[#21262d]/60 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                  className="p-3 sm:p-4 hover:bg-[#162942]/80 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <button
@@ -413,7 +474,7 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                         e.stopPropagation();
                         onToggleStar(att.id);
                       }}
-                      className="text-slate-500 hover:text-amber-400 transition-colors p-1"
+                      className="text-slate-400 hover:text-amber-400 transition-colors p-1"
                     >
                       <Star className={`w-4 h-4 ${att.starred ? 'text-amber-400 fill-amber-400' : ''}`} />
                     </button>
@@ -422,45 +483,77 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                     {renderThumbnailBox(att, "w-12 h-12 sm:w-14 sm:h-14")}
 
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-100 text-sm truncate group-hover:theme-text transition-colors">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-white text-sm truncate group-hover:text-[#DFC57B] transition-colors">
                           {att.title}
                         </span>
                         {renderVisualBadge(att.category, att.fileName)}
+                        {att.customSection && (
+                          <span className="px-2 py-0.5 rounded bg-[#0B192C] text-[#79C8E8] border border-[#79C8E8]/30 text-[10px]">
+                            {att.customSection}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-xs text-slate-400 truncate mt-1">
-                        <span className="text-slate-300 font-medium">{att.projectName}</span>
+                      <p className="text-xs text-slate-300 truncate mt-1">
+                        <span className="text-[#A9DDF1] font-medium">{att.projectName}</span>
                         <span className="mx-1.5">·</span>
                         <span>{att.fileName}</span>
+                        {att.folder === 'trash' && (
+                          <span className="ms-2 text-amber-300 font-semibold">
+                            ({lang === 'ar' ? `متبقي ${getRemainingRecoveryDays(att.deletedAt)} يوم للاستعادة` : `${getRemainingRecoveryDays(att.deletedAt)}j restants`})
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 text-xs text-slate-400 self-end sm:self-center shrink-0">
-                    <span className="font-mono text-[11px] theme-text font-semibold">
+                  <div className="flex items-center gap-2.5 text-xs text-slate-300 self-end sm:self-center shrink-0">
+                    <span className="font-mono text-[11px] text-[#DFC57B] font-semibold">
                       {formatBytes(att.fileSizeBytes)}
                     </span>
-                    <span className="text-slate-500">
+                    <span className="text-slate-400">
                       {new Date(att.uploadedAt).toLocaleDateString()}
                     </span>
+
+                    {att.folder === 'trash' && onRestoreAttachment && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRestoreAttachment(att.id);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1"
+                        title={lang === 'ar' ? 'استعادة الملف' : 'Restaurer'}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'استعادة' : 'Restaurer'}</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={(e) => handleQuickShare(e, att)}
+                      className="p-1.5 rounded-lg bg-[#0B192C] hover:bg-[#162942] text-[#79C8E8] border border-[#79C8E8]/30 transition-colors"
+                      title={t.share}
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onOpenViewer(att);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-slate-200 text-xs font-semibold border border-[#30363d] transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold border border-[#79C8E8]/30 transition-colors"
                     >
-                      <Eye className="w-3.5 h-3.5 inline me-1 theme-text" />
+                      <Eye className="w-3.5 h-3.5 inline me-1 text-[#DFC57B]" />
                       <span>{lang === 'ar' ? 'معاينة' : 'Ouvrir'}</span>
                     </button>
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm(t.deleteConfirm)) {
-                          onDeleteAttachment(att.id);
-                        }
+                        onDeleteAttachment(att.id);
                       }}
-                      className="p-1.5 rounded-lg bg-[#21262d] hover:bg-red-950/60 text-slate-400 hover:text-red-400 border border-[#30363d] transition-colors"
+                      className="p-1.5 rounded-lg bg-[#0B192C] hover:bg-[#E50914]/25 text-slate-300 hover:text-[#E50914] border border-[#79C8E8]/25 transition-colors"
                       title={t.deleteAttachment}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -473,20 +566,20 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
         </div>
       )}
 
-      {/* 4. LAYOUT MODEL 2: CLASSIC SPLIT SIDEBAR (القائمة الجانبية الكلاسيكية) */}
+      {/* 4. LAYOUT MODEL 2: CLASSIC SPLIT SIDEBAR (Preserves the established sidebar structure + custom sections + 30-day trash) */}
       {layoutModel === 'sidebar' && (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
           <div className={`${sidebarCollapsed ? 'md:col-span-1' : 'md:col-span-3'} space-y-4`}>
-            <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 shadow-xl">
+            <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-4 shadow-xl">
               <div className="flex items-center justify-between mb-4">
                 {!sidebarCollapsed && (
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  <h4 className="text-xs font-bold text-[#DFC57B] uppercase tracking-wider">
                     {lang === 'ar' ? 'صناديق البريد والمجلدات' : 'Dossiers & Boîtes'}
                   </h4>
                 )}
                 <button
                   onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                  className="p-1.5 rounded-lg bg-[#0d1117] text-slate-400 hover:text-white cursor-pointer ms-auto"
+                  className="p-1.5 rounded-lg bg-[#0B192C] text-slate-300 hover:text-white cursor-pointer ms-auto"
                 >
                   {sidebarCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
                 </button>
@@ -497,17 +590,21 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                   { id: 'inbox', label: t.inbox, icon: Inbox, count: folderCounts.inbox },
                   { id: 'sent', label: t.sent, icon: Send, count: folderCounts.sent },
                   { id: 'starred', label: t.starred, icon: Star, count: folderCounts.starred },
+                  { id: 'trash', label: `${t.trash} (30j)`, icon: Trash2, count: folderCounts.trash },
                 ].map((f) => {
                   const Icon = f.icon;
-                  const isActive = activeFolder === f.id;
+                  const isActive = activeFolder === f.id && !selectedCustomSection;
                   return (
                     <button
                       key={f.id}
-                      onClick={() => setActiveFolder(f.id as any)}
+                      onClick={() => {
+                        setActiveFolder(f.id as any);
+                        setSelectedCustomSection(null);
+                      }}
                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                         isActive
-                          ? 'theme-btn font-bold shadow-md'
-                          : 'text-slate-300 hover:bg-[#21262d] hover:text-white'
+                          ? 'bg-[#DFC57B] text-[#0B192C] font-bold shadow-md'
+                          : 'text-slate-200 hover:bg-[#162942] hover:text-white'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -523,22 +620,74 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                   );
                 })}
               </div>
+
+              {/* Custom Sections / Folders inside Sidebar */}
+              {!sidebarCollapsed && (
+                <div className="mt-5 pt-4 border-t border-[#79C8E8]/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold text-[#A9DDF1] uppercase tracking-wider">
+                      {t.customFolders}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewFolderModal(true)}
+                      className="p-1 rounded-lg bg-[#0B192C] text-[#DFC57B] hover:bg-[#162942] cursor-pointer"
+                      title={t.addCustomFolder}
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {customFolders.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowNewFolderModal(true)}
+                      className="w-full py-2 px-3 rounded-xl border border-dashed border-[#79C8E8]/30 text-[11px] text-slate-300 hover:text-white hover:border-[#DFC57B] transition-colors text-start cursor-pointer"
+                    >
+                      + {t.addCustomFolder}
+                    </button>
+                  ) : (
+                    <div className="space-y-1">
+                      {customFolders.map((sec) => {
+                        const isSecActive = selectedCustomSection === sec;
+                        return (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => setSelectedCustomSection(isSecActive ? null : sec)}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                              isSecActive
+                                ? 'bg-[#79C8E8] text-[#0B192C] font-bold'
+                                : 'text-slate-200 hover:bg-[#162942]'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 truncate">
+                              <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{sec}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           <div className={`${sidebarCollapsed ? 'md:col-span-11' : 'md:col-span-9'}`}>
-            <div className="bg-[#161b22] border border-[#30363d] rounded-2xl shadow-xl overflow-hidden divide-y divide-[#21262d]">
+            <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl shadow-xl overflow-hidden divide-y divide-[#79C8E8]/15">
               {filteredAttachments.length === 0 ? (
-                <div className="py-16 text-center text-slate-500">
-                  <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-slate-400" />
-                  <p className="text-sm font-semibold text-slate-400">{t.noAttachmentsFound}</p>
+                <div className="py-16 text-center text-slate-400">
+                  <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-[#79C8E8]" />
+                  <p className="text-sm font-semibold text-white">{t.noAttachmentsFound}</p>
                 </div>
               ) : (
                 filteredAttachments.map((att) => (
                   <div
                     key={att.id}
                     onClick={() => onOpenViewer(att)}
-                    className="p-3 sm:p-4 hover:bg-[#21262d]/60 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                    className="p-3 sm:p-4 hover:bg-[#162942]/80 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                   >
                     <div className="flex items-center gap-3.5 min-w-0">
                       <button
@@ -546,7 +695,7 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                           e.stopPropagation();
                           onToggleStar(att.id);
                         }}
-                        className="text-slate-500 hover:text-amber-400 transition-colors p-1"
+                        className="text-slate-400 hover:text-amber-400 transition-colors p-1"
                       >
                         <Star className={`w-4 h-4 ${att.starred ? 'text-amber-400 fill-amber-400' : ''}`} />
                       </button>
@@ -554,30 +703,69 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                       {renderThumbnailBox(att, "w-12 h-12")}
 
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-100 text-sm truncate group-hover:theme-text transition-colors">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-white text-sm truncate group-hover:text-[#DFC57B] transition-colors">
                             {att.title}
                           </span>
                           {renderVisualBadge(att.category, att.fileName)}
+                          {att.customSection && (
+                            <span className="px-2 py-0.5 rounded bg-[#0B192C] text-[#79C8E8] border border-[#79C8E8]/30 text-[10px]">
+                              {att.customSection}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-slate-400 truncate mt-1">
+                        <p className="text-xs text-slate-300 truncate mt-1">
                           <span>{att.projectName}</span>
                           <span className="mx-1.5">·</span>
-                          <span className="font-mono theme-text">{formatBytes(att.fileSizeBytes)}</span>
+                          <span className="font-mono text-[#DFC57B]">{formatBytes(att.fileSizeBytes)}</span>
+                          {att.folder === 'trash' && (
+                            <span className="ms-2 text-amber-300 font-semibold">
+                              ({lang === 'ar' ? `متبقي ${getRemainingRecoveryDays(att.deletedAt)} يوم` : `${getRemainingRecoveryDays(att.deletedAt)}j`})
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <div className="flex items-center gap-2 text-xs text-slate-300">
                       <span>{new Date(att.uploadedAt).toLocaleDateString()}</span>
+                      {att.folder === 'trash' && onRestoreAttachment && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRestoreAttachment(att.id);
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'استعادة' : 'Restaurer'}</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => handleQuickShare(e, att)}
+                        className="p-1.5 rounded-lg bg-[#0B192C] hover:bg-[#162942] text-[#79C8E8] border border-[#79C8E8]/30"
+                        title={t.share}
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onOpenViewer(att);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-slate-200 text-xs font-semibold border border-[#30363d]"
+                        className="px-3 py-1.5 rounded-lg bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold border border-[#79C8E8]/30"
                       >
                         {lang === 'ar' ? 'عرض' : 'Ouvrir'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteAttachment(att.id);
+                        }}
+                        className="p-1.5 rounded-lg bg-[#0B192C] hover:bg-[#E50914]/25 text-slate-300 hover:text-[#E50914] border border-[#79C8E8]/25"
+                        title={t.deleteAttachment}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -588,30 +776,28 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
         </div>
       )}
 
-      {/* 5. LAYOUT MODEL 3: INTERACTIVE PROJECT CARD GRID (شبكة بطاقات المشاريع التفاعلية) */}
+      {/* 5. LAYOUT MODEL 3: INTERACTIVE PROJECT CARD GRID */}
       {layoutModel === 'grid' && (
         <div className="space-y-6">
-          {/* Back button if user drilled into a specific project */}
           {gridActiveProjectId && (
-            <div className="flex items-center justify-between bg-[#161b22] border border-[#30363d] p-3 rounded-2xl">
+            <div className="flex items-center justify-between bg-[#112239] border border-[#79C8E8]/30 p-3 rounded-2xl">
               <button
                 onClick={() => setGridActiveProjectId(null)}
-                className="flex items-center gap-2 text-xs font-bold theme-text hover:underline cursor-pointer"
+                className="flex items-center gap-2 text-xs font-bold text-[#DFC57B] hover:underline cursor-pointer"
               >
                 <ArrowRight className={`w-4 h-4 ${lang === 'fr' ? 'rotate-180' : ''}`} />
                 <span>{t.backToProjectsGrid}</span>
               </button>
-              <span className="text-xs text-slate-300 font-bold">
+              <span className="text-xs text-white font-bold">
                 {clientProjects.find((p) => p.id === gridActiveProjectId)?.name}
               </span>
             </div>
           )}
 
-          {/* If no project is selected, show Interactive Project Dossier Cards */}
           {!gridActiveProjectId && clientProjects.length > 0 && selectedProjectId === 'all' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {clientProjects.map((proj) => {
-                const projFiles = attachments.filter((a) => a.projectId === proj.id);
+                const projFiles = attachments.filter((a) => a.projectId === proj.id && a.folder !== 'trash');
                 const photosCount = projFiles.filter((a) => a.category === 'photo').length;
                 const videosCount = projFiles.filter((a) => a.category === 'video').length;
                 const docsCount = projFiles.filter((a) => a.category === 'document').length;
@@ -621,11 +807,11 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                   <div
                     key={proj.id}
                     onClick={() => setGridActiveProjectId(proj.id)}
-                    className="bg-[#161b22] border border-[#30363d] rounded-2xl p-5 shadow-xl hover:theme-border transition-all cursor-pointer flex flex-col justify-between group"
+                    className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-5 shadow-xl hover:border-[#DFC57B] transition-all cursor-pointer flex flex-col justify-between group"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full bg-[#0d1117] theme-text theme-border border">
+                        <span className="text-[10px] font-mono uppercase px-2.5 py-0.5 rounded-full bg-[#0B192C] text-[#DFC57B] border border-[#DFC57B]/40">
                           {proj.type}
                         </span>
                         <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
@@ -634,37 +820,36 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                         </span>
                       </div>
 
-                      <h4 className="font-bold text-base text-white group-hover:theme-text transition-colors mb-1">
+                      <h4 className="font-bold text-base text-[#DFC57B] group-hover:text-white transition-colors mb-1">
                         {proj.name}
                       </h4>
-                      <p className="text-xs text-slate-400 mb-4 flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                      <p className="text-xs text-slate-300 mb-4 flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-[#79C8E8]" />
                         <span>{proj.clientName} · {proj.location}</span>
                       </p>
 
-                      {/* Summary Badges Grid for Project Media */}
-                      <div className="grid grid-cols-3 gap-2 bg-[#0d1117] p-2.5 rounded-xl border border-[#21262d] mb-4 text-center text-xs">
+                      <div className="grid grid-cols-3 gap-2 bg-[#0B192C] p-2.5 rounded-xl border border-[#79C8E8]/20 mb-4 text-center text-xs">
                         <div className="flex flex-col items-center">
                           <ImageIcon className="w-4 h-4 text-cyan-400 mb-1" />
-                          <span className="font-mono font-bold text-slate-200">{photosCount}</span>
-                          <span className="text-[10px] text-slate-500">{t.categoryPhoto}</span>
+                          <span className="font-mono font-bold text-white">{photosCount}</span>
+                          <span className="text-[10px] text-slate-400">{t.categoryPhoto}</span>
                         </div>
                         <div className="flex flex-col items-center">
                           <Film className="w-4 h-4 text-purple-400 mb-1" />
-                          <span className="font-mono font-bold text-slate-200">{videosCount}</span>
-                          <span className="text-[10px] text-slate-500">{t.categoryVideo}</span>
+                          <span className="font-mono font-bold text-white">{videosCount}</span>
+                          <span className="text-[10px] text-slate-400">{t.categoryVideo}</span>
                         </div>
                         <div className="flex flex-col items-center">
                           <FileText className="w-4 h-4 text-red-400 mb-1" />
-                          <span className="font-mono font-bold text-slate-200">{docsCount}</span>
-                          <span className="text-[10px] text-slate-500">{t.categoryDocument}</span>
+                          <span className="font-mono font-bold text-white">{docsCount}</span>
+                          <span className="text-[10px] text-slate-400">{t.categoryDocument}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-[#30363d] flex items-center justify-between text-xs text-slate-400">
-                      <span className="font-mono theme-text font-bold">{formatBytes(totalBytes)}</span>
-                      <span className="flex items-center gap-1 font-semibold text-slate-300 group-hover:theme-text">
+                    <div className="pt-3 border-t border-[#79C8E8]/20 flex items-center justify-between text-xs text-slate-300">
+                      <span className="font-mono text-[#DFC57B] font-bold">{formatBytes(totalBytes)}</span>
+                      <span className="flex items-center gap-1 font-semibold text-[#A9DDF1] group-hover:text-[#DFC57B]">
                         <span>{t.openProjectDossier}</span>
                         <ChevronRight className={`w-3.5 h-3.5 ${lang === 'ar' ? 'rotate-180' : ''}`} />
                       </span>
@@ -678,172 +863,187 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
           {/* Media Cards Grid for Files */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredAttachments.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-slate-500 bg-[#161b22] border border-[#30363d] rounded-2xl">
-                <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-slate-400" />
-                <p className="text-sm font-semibold text-slate-400">{t.noAttachmentsFound}</p>
+              <div className="col-span-full py-16 text-center text-slate-400 bg-[#112239] border border-[#79C8E8]/25 rounded-2xl">
+                <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-[#79C8E8]" />
+                <p className="text-sm font-semibold text-white">{t.noAttachmentsFound}</p>
               </div>
             ) : (
-              filteredAttachments.map((att) => (
-                <div
-                  key={att.id}
-                  onClick={() => onOpenViewer(att)}
-                  className="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 shadow-xl hover:theme-border transition-all cursor-pointer flex flex-col justify-between group relative"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {renderVisualBadge(att.category, att.fileName)}
+              filteredAttachments.map((att) => {
+                const resolvedImg =
+                  !att.fileUrl || att.fileUrl.includes('/public/assets/aistudio/1000127391_10ae27f3.jpg')
+                    ? '/1000127391_10ae27f3.jpg'
+                    : att.fileUrl;
+                return (
+                  <div
+                    key={att.id}
+                    onClick={() => onOpenViewer(att)}
+                    className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-4 shadow-xl hover:border-[#DFC57B] transition-all cursor-pointer flex flex-col justify-between group relative"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          {renderVisualBadge(att.category, att.fileName)}
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleStar(att.id);
+                          }}
+                          className="text-slate-400 hover:text-amber-400 p-1"
+                        >
+                          <Star className={`w-4 h-4 ${att.starred ? 'text-amber-400 fill-amber-400' : ''}`} />
+                        </button>
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleStar(att.id);
-                        }}
-                        className="text-slate-500 hover:text-amber-400 p-1"
-                      >
-                        <Star className={`w-4 h-4 ${att.starred ? 'text-amber-400 fill-amber-400' : ''}`} />
-                      </button>
+                      <h4 className="font-bold text-sm text-white group-hover:text-[#DFC57B] transition-colors line-clamp-1 mb-1">
+                        {att.title}
+                      </h4>
+                      <p className="text-xs text-[#A9DDF1] mb-3 line-clamp-1">
+                        {att.projectName}
+                      </p>
+
+                      <div className="w-full h-36 rounded-xl bg-black border border-[#79C8E8]/25 overflow-hidden flex items-center justify-center mb-3 relative">
+                        {att.category === 'photo' ? (
+                          <img 
+                            src={resolvedImg} 
+                            alt={att.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                          />
+                        ) : att.category === 'video' || att.fileName.endsWith('.mp4') || att.fileName.endsWith('.mov') || att.fileName.endsWith('.avi') ? (
+                          <div className="w-full h-full bg-gradient-to-br from-purple-950 via-black to-[#0B192C] flex flex-col items-center justify-center text-purple-400 relative">
+                            <Film className="w-10 h-10 mb-1" />
+                            <span className="text-[10px] font-mono font-bold bg-black/60 px-2 py-0.5 rounded text-purple-300">
+                              VIDEO · 1080p FULL HD
+                            </span>
+                            <span className="absolute bottom-2 right-2 text-[10px] font-mono text-slate-300 bg-black/70 px-1.5 rounded">
+                              {formatBytes(att.fileSizeBytes)}
+                            </span>
+                          </div>
+                        ) : att.category === 'document' || att.fileName.endsWith('.pdf') ? (
+                          <div className="w-full h-full bg-gradient-to-br from-red-950/60 via-[#112239] to-black flex flex-col items-center justify-center p-3 text-center">
+                            <FileText className="w-10 h-10 text-red-400 mb-1" />
+                            <span className="text-xs font-bold text-white line-clamp-1">{att.fileName}</span>
+                            <span className="text-[10px] font-mono text-red-300 mt-1">DOCUMENT PDF</span>
+                          </div>
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-amber-950/50 via-[#112239] to-black p-4 flex flex-col justify-center">
+                            <FileCheck2 className="w-8 h-8 text-amber-400 mb-1" />
+                            <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed">
+                              {att.notes || (lang === 'ar' ? 'مذكرة تقنية مؤرشفة.' : 'Note technique archivée.')}
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <h4 className="font-bold text-sm text-white group-hover:theme-text transition-colors line-clamp-1 mb-1">
-                      {att.title}
-                    </h4>
-                    <p className="text-xs text-slate-400 mb-3 line-clamp-1">
-                      {att.projectName}
-                    </p>
-
-                    {/* Rich Visual Card Preview regardless of format */}
-                    <div className="w-full h-36 rounded-xl bg-black border border-[#30363d] overflow-hidden flex items-center justify-center mb-3 relative">
-                      {att.category === 'photo' ? (
-                        <img 
-                          src={att.fileUrl || '/public/assets/aistudio/1000127391_10ae27f3.jpg'} 
-                          alt={att.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
-                        />
-                      ) : att.category === 'video' || att.fileName.endsWith('.mp4') || att.fileName.endsWith('.mov') || att.fileName.endsWith('.avi') ? (
-                        <div className="w-full h-full bg-gradient-to-br from-purple-950 via-black to-[#0d1117] flex flex-col items-center justify-center text-purple-400 relative">
-                          <Film className="w-10 h-10 mb-1" />
-                          <span className="text-[10px] font-mono font-bold bg-black/60 px-2 py-0.5 rounded text-purple-300">
-                            VIDEO · 1080p FULL HD
-                          </span>
-                          <span className="absolute bottom-2 right-2 text-[10px] font-mono text-slate-400 bg-black/70 px-1.5 rounded">
-                            {formatBytes(att.fileSizeBytes)}
-                          </span>
-                        </div>
-                      ) : att.category === 'document' || att.fileName.endsWith('.pdf') ? (
-                        <div className="w-full h-full bg-gradient-to-br from-red-950/60 via-[#161b22] to-black flex flex-col items-center justify-center p-3 text-center">
-                          <FileText className="w-10 h-10 text-red-400 mb-1" />
-                          <span className="text-xs font-bold text-slate-200 line-clamp-1">{att.fileName}</span>
-                          <span className="text-[10px] font-mono text-red-300 mt-1">DOCUMENT TECHNIQUE PDF</span>
-                        </div>
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-amber-950/50 via-[#161b22] to-black p-4 flex flex-col justify-center">
-                          <FileCheck2 className="w-8 h-8 text-amber-400 mb-1" />
-                          <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
-                            {att.notes || 'Note technique archivée.'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-[#30363d] flex items-center justify-between text-xs text-slate-400">
-                    <span className="font-mono theme-text font-bold">{formatBytes(att.fileSizeBytes)}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenViewer(att);
-                        }}
-                        className="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-slate-200 text-xs font-semibold"
-                      >
-                        {lang === 'ar' ? 'معاينة' : 'Ouvrir'}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(t.deleteConfirm)) {
+                    <div className="pt-3 border-t border-[#79C8E8]/20 flex items-center justify-between text-xs text-slate-300">
+                      <span className="font-mono text-[#DFC57B] font-bold">{formatBytes(att.fileSizeBytes)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={(e) => handleQuickShare(e, att)}
+                          className="p-1.5 rounded bg-[#0B192C] hover:bg-[#162942] text-[#79C8E8]"
+                          title={t.share}
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenViewer(att);
+                          }}
+                          className="px-2.5 py-1 rounded bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold"
+                        >
+                          {lang === 'ar' ? 'معاينة' : 'Ouvrir'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             onDeleteAttachment(att.id);
-                          }
-                        }}
-                        className="p-1 rounded bg-[#21262d] hover:bg-red-950/60 text-slate-400 hover:text-red-400"
-                        title={t.deleteAttachment}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                          }}
+                          className="p-1 rounded bg-[#0B192C] hover:bg-[#E50914]/25 text-slate-300 hover:text-[#E50914]"
+                          title={t.deleteAttachment}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
       )}
 
-      {/* 6. LAYOUT MODEL 4: TIMELINE DOSSIER (الأرشيف الزمني للأحداث والمرفقات) */}
+      {/* 6. LAYOUT MODEL 4: TIMELINE DOSSIER */}
       {layoutModel === 'timeline' && (
-        <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 shadow-xl">
-          <div className="mb-6 pb-4 border-b border-[#30363d] flex items-center justify-between">
+        <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-6 shadow-xl">
+          <div className="mb-6 pb-4 border-b border-[#79C8E8]/20 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 theme-text" />
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+              <Clock className="w-5 h-5 text-[#DFC57B]" />
+              <h4 className="text-sm font-bold text-[#DFC57B] uppercase tracking-wider">
                 {t.layoutTimeline}
               </h4>
             </div>
-            <span className="text-xs text-slate-400 font-mono">
+            <span className="text-xs text-[#A9DDF1] font-mono">
               {filteredAttachments.length} {lang === 'ar' ? 'أحداث موثقة' : 'événements archivés'}
             </span>
           </div>
 
           {filteredAttachments.length === 0 ? (
-            <div className="py-16 text-center text-slate-500">
-              <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-slate-400" />
-              <p className="text-sm font-semibold text-slate-400">{t.noAttachmentsFound}</p>
+            <div className="py-16 text-center text-slate-400">
+              <FileQuestion className="w-12 h-12 mx-auto mb-3 opacity-40 text-[#79C8E8]" />
+              <p className="text-sm font-semibold text-white">{t.noAttachmentsFound}</p>
             </div>
           ) : (
-            <div className="relative border-s border-[#30363d] ms-4 space-y-8">
+            <div className="relative border-s border-[#79C8E8]/30 ms-4 space-y-8">
               {filteredAttachments.map((att) => (
                 <div key={att.id} className="relative ps-6 group cursor-pointer" onClick={() => onOpenViewer(att)}>
-                  <span className="absolute -start-3 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#0d1117] theme-border-solid border-2 theme-text shadow-md group-hover:scale-125 transition-transform">
+                  <span className="absolute -start-3 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-[#0B192C] border-2 border-[#DFC57B] text-[#DFC57B] shadow-md group-hover:scale-125 transition-transform">
                     {renderThumbnailBox(att, "w-4 h-4 rounded-full")}
                   </span>
 
-                  <div className="bg-[#0d1117] border border-[#30363d] group-hover:theme-border rounded-2xl p-4 transition-all">
+                  <div className="bg-[#0B192C] border border-[#79C8E8]/25 group-hover:border-[#DFC57B] rounded-2xl p-4 transition-all">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                       <div className="flex items-center gap-3">
                         {renderThumbnailBox(att, "w-10 h-10")}
                         <div>
-                          <span className="font-bold text-sm text-white group-hover:theme-text transition-colors block">
+                          <span className="font-bold text-sm text-white group-hover:text-[#DFC57B] transition-colors block">
                             {att.title}
                           </span>
-                          <span className="text-xs text-slate-400">{att.projectName}</span>
+                          <span className="text-xs text-[#A9DDF1]">{att.projectName}</span>
                         </div>
                         {renderVisualBadge(att.category, att.fileName)}
                       </div>
-                      <span className="text-xs font-mono text-slate-400">
+                      <span className="text-xs font-mono text-slate-300">
                         {new Date(att.uploadedAt).toLocaleString()}
                       </span>
                     </div>
 
                     {att.notes && (
-                      <p className="text-xs text-slate-300 bg-[#161b22] p-2.5 rounded-xl border border-[#21262d] my-3">
+                      <p className="text-xs text-slate-200 bg-[#112239] p-2.5 rounded-xl border border-[#79C8E8]/20 my-3">
                         {att.notes}
                       </p>
                     )}
 
-                    <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-[#21262d]">
-                      <span>{t.uploadedBy}: <strong className="theme-text">{att.senderName}</strong></span>
+                    <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-[#79C8E8]/15">
+                      <span>{t.uploadedBy}: <strong className="text-[#DFC57B]">{att.senderName}</strong></span>
                       <div className="flex items-center gap-3">
-                        <span className="font-mono text-slate-300">{formatBytes(att.fileSizeBytes)}</span>
+                        <span className="font-mono text-white">{formatBytes(att.fileSizeBytes)}</span>
+                        <button
+                          onClick={(e) => handleQuickShare(e, att)}
+                          className="text-[#79C8E8] hover:text-white p-1"
+                          title={t.share}
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(t.deleteConfirm)) {
-                              onDeleteAttachment(att.id);
-                            }
+                            onDeleteAttachment(att.id);
                           }}
-                          className="text-slate-500 hover:text-red-400 p-1"
+                          className="text-slate-400 hover:text-[#E50914] p-1"
                           title={t.deleteAttachment}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -858,12 +1058,12 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
         </div>
       )}
 
-      {/* 7. LAYOUT MODEL 5: COMPACT DATA TABLE (جدول البيانات المدمج عالي الكثافة) */}
+      {/* 7. LAYOUT MODEL 5: COMPACT DATA TABLE */}
       {layoutModel === 'compact' && (
-        <div className="bg-[#161b22] border border-[#30363d] rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-start">
-              <thead className="bg-[#0d1117] border-b border-[#30363d] text-slate-400 uppercase font-semibold">
+              <thead className="bg-[#0B192C] border-b border-[#79C8E8]/25 text-[#DFC57B] uppercase font-semibold">
                 <tr>
                   <th className="p-3 ps-4 text-start">{t.attachmentTitle}</th>
                   <th className="p-3 text-start">{t.project}</th>
@@ -874,10 +1074,10 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                   <th className="p-3 pe-4 text-end">{lang === 'ar' ? 'الإجراءات' : 'Actions'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#21262d]">
+              <tbody className="divide-y divide-[#79C8E8]/15">
                 {filteredAttachments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-500">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       {t.noAttachmentsFound}
                     </td>
                   </tr>
@@ -886,16 +1086,16 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                     <tr
                       key={att.id}
                       onClick={() => onOpenViewer(att)}
-                      className="hover:bg-[#21262d]/70 transition-colors cursor-pointer group"
+                      className="hover:bg-[#162942]/70 transition-colors cursor-pointer group"
                     >
-                      <td className="p-3 ps-4 font-semibold text-white group-hover:theme-text transition-colors truncate max-w-[240px]">
+                      <td className="p-3 ps-4 font-semibold text-white group-hover:text-[#DFC57B] transition-colors truncate max-w-[240px]">
                         <div className="flex items-center gap-3">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               onToggleStar(att.id);
                             }}
-                            className="text-slate-500 hover:text-amber-400"
+                            className="text-slate-400 hover:text-amber-400"
                           >
                             <Star className={`w-3.5 h-3.5 ${att.starred ? 'text-amber-400 fill-amber-400' : ''}`} />
                           </button>
@@ -903,32 +1103,37 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                           <span className="truncate">{att.title}</span>
                         </div>
                       </td>
-                      <td className="p-3 text-slate-300 truncate max-w-[160px]">{att.projectName}</td>
+                      <td className="p-3 text-slate-200 truncate max-w-[160px]">{att.projectName}</td>
                       <td className="p-3">
                         {renderVisualBadge(att.category, att.fileName)}
                       </td>
-                      <td className="p-3 font-mono theme-text font-semibold">{formatBytes(att.fileSizeBytes)}</td>
-                      <td className="p-3 text-slate-400 truncate max-w-[140px]">{att.senderName}</td>
-                      <td className="p-3 text-slate-500 font-mono">{new Date(att.uploadedAt).toLocaleDateString()}</td>
+                      <td className="p-3 font-mono text-[#DFC57B] font-semibold">{formatBytes(att.fileSizeBytes)}</td>
+                      <td className="p-3 text-slate-300 truncate max-w-[140px]">{att.senderName}</td>
+                      <td className="p-3 text-slate-400 font-mono">{new Date(att.uploadedAt).toLocaleDateString()}</td>
                       <td className="p-3 pe-4 text-end">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={(e) => handleQuickShare(e, att)}
+                            className="p-1.5 rounded bg-[#0B192C] hover:bg-[#162942] text-[#79C8E8]"
+                            title={t.share}
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               onOpenViewer(att);
                             }}
-                            className="px-2.5 py-1 rounded bg-[#21262d] hover:bg-[#30363d] text-slate-200 text-xs font-semibold"
+                            className="px-2.5 py-1 rounded bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold"
                           >
                             {lang === 'ar' ? 'معاينة' : 'Ouvrir'}
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm(t.deleteConfirm)) {
-                                onDeleteAttachment(att.id);
-                              }
+                              onDeleteAttachment(att.id);
                             }}
-                            className="p-1 rounded bg-[#21262d] hover:bg-red-950/60 text-slate-400 hover:text-red-400"
+                            className="p-1 rounded bg-[#0B192C] hover:bg-[#E50914]/25 text-slate-300 hover:text-[#E50914]"
                             title={t.deleteAttachment}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -940,6 +1145,52 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* NEW CUSTOM SECTION / FOLDER MODAL */}
+      {showNewFolderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold text-[#DFC57B] text-sm flex items-center gap-2">
+                <FolderPlus className="w-4 h-4 text-[#79C8E8]" />
+                <span>{t.addCustomFolder}</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowNewFolderModal(false)}
+                className="p-1 rounded bg-[#0B192C] text-slate-300 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateCustomFolder} className="space-y-3">
+              <input
+                type="text"
+                required
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder={t.folderNamePlaceholder}
+                className="w-full px-3 py-2 rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 text-white text-xs focus:border-[#DFC57B] focus:outline-none"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewFolderModal(false)}
+                  className="px-3 py-1.5 rounded-xl bg-[#0B192C] text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-[#DFC57B] text-[#0B192C] text-xs font-bold cursor-pointer"
+                >
+                  {t.createFolderBtn}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

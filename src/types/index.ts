@@ -10,6 +10,7 @@ export type ThemeColor = 'beige' | 'silver' | 'bronze' | 'navy' | 'emerald';
 
 export interface User {
   id: string;
+  uid?: string;
   fullName: string;
   companyName: string;
   email: string;
@@ -62,10 +63,13 @@ export interface Attachment {
   previewType?: 'image' | 'video' | 'pdf' | 'text';
   downloadCount?: number;
   videoMimeType?: string;
+  deletedAt?: string;
+  customSection?: string;
 }
 
 export interface PendingRegistration {
   id: string;
+  uid?: string;
   fullName: string;
   companyName: string;
   email: string;
@@ -74,6 +78,7 @@ export interface PendingRegistration {
   projectType: ProjectCategory;
   requestedAt: string;
   notes?: string;
+  password?: string;
 }
 
 export interface NotificationItem {

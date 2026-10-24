@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Verified administrator record for RBAC.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "companyName": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "email", "fullName", "companyName", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Portal user profile (Admin or Client).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "companyName": { "type": "string", "maxLength": 150 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "role": { "type": "string", "enum": ["client", "admin"], "maxLength": 20 },
+        "status": { "type": "string", "enum": ["active", "pending", "suspended"], "maxLength": 20 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "assignedProjectIds": { "type": "array" },
+        "city": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "password": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "fullName", "companyName", "email", "phone", "role", "status", "createdAt", "assignedProjectIds"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Industrial thermal insulation project assigned to a client.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "clientName": { "type": "string", "maxLength": 150 },
+        "name": { "type": "string", "maxLength": 200 },
+        "location": { "type": "string", "maxLength": 200 },
+        "type": { "type": "string", "enum": ["tuyauterie", "conduits", "cuves", "batiment", "chaudieres", "autre"], "maxLength": 30 },
+        "status": { "type": "string", "enum": ["in_progress", "completed", "maintenance"], "maxLength": 30 },
+        "startDate": { "type": "string", "maxLength": 40 },
+        "completionPercentage": { "type": "number" },
+        "totalStorageBytes": { "type": "number" },
+        "description": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["id", "clientId", "clientName", "name", "location", "type", "status", "startDate", "completionPercentage", "totalStorageBytes", "description"]
+    },
+    "Attachment": {
+      "title": "Attachment",
+      "description": "Project document, photo, video, or technical report.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "projectId": { "type": "string", "maxLength": 128 },
+        "projectName": { "type": "string", "maxLength": 200 },
+        "clientId": { "type": "string", "maxLength": 128 },
+        "senderType": { "type": "string", "enum": ["client", "admin"], "maxLength": 20 },
+        "senderName": { "type": "string", "maxLength": 150 },
+        "title": { "type": "string", "maxLength": 250 },
+        "category": { "type": "string", "enum": ["photo", "video", "document", "note", "other"], "maxLength": 30 },
+        "fileUrl": { "type": "string", "maxLength": 900000 },
+        "fileName": { "type": "string", "maxLength": 255 },
+        "fileSizeBytes": { "type": "number" },
+        "uploadedAt": { "type": "string", "maxLength": 64 },
+        "starred": { "type": "boolean" },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "folder": { "type": "string", "enum": ["inbox", "sent", "starred", "trash"], "maxLength": 30 },
+        "previewType": { "type": "string", "maxLength": 30 }
+      },
+      "required": ["id", "projectId", "projectName", "clientId", "senderType", "senderName", "title", "category", "fileUrl", "fileName", "fileSizeBytes", "uploadedAt"]
+    },
+    "PendingRegistration": {
+      "title": "PendingRegistration",
+      "description": "Client account registration request awaiting admin approval.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "companyName": { "type": "string", "maxLength": 150 },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "city": { "type": "string", "maxLength": 100 },
+        "projectType": { "type": "string", "enum": ["tuyauterie", "conduits", "cuves", "batiment", "chaudieres", "autre"], "maxLength": 30 },
+        "requestedAt": { "type": "string", "maxLength": 64 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "password": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "fullName", "companyName", "email", "phone", "city", "projectType", "requestedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": "Admin",
+      "description": "Verified administrator UIDs for role-based access control."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles for clients and administrators."
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Projects assigned to clients."
+    },
+    "/attachments/{attachmentId}": {
+      "schema": "Attachment",
+      "description": "Project attachments exchanged between clients and administration."
+    },
+    "/pendingRegistrations/{registrationId}": {
+      "schema": "PendingRegistration",
+      "description": "Account registration requests submitted by prospective clients."
+    }
+  }
+}
