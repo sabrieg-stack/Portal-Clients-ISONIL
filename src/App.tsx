@@ -33,6 +33,10 @@ import {
   onAuthStateChanged,
   firebaseSignOut,
   fetchVerifiedUserFromFirestore,
+  fetchProjectsFromFirestore,
+  fetchAttachmentsFromFirestore,
+  fetchPendingRegistrationsFromFirestore,
+  fetchUsersFromFirestore,
   syncUserToFirestore,
   syncProjectToFirestore,
   syncAttachmentToFirestore,
@@ -191,6 +195,62 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Synchronize projects, attachments, and users from Firestore when an authenticated session is active
+  useEffect(() => {
+    if (!currentUser) return;
+    let isMounted = true;
+    const loadRemoteData = async () => {
+      try {
+        const [remoteProjects, remoteAttachments] = await Promise.all([
+          fetchProjectsFromFirestore(currentUser),
+          fetchAttachmentsFromFirestore(currentUser),
+        ]);
+        if (!isMounted) return;
+        if (remoteProjects.length > 0) {
+          setProjects((prev) => {
+            const map = new Map(prev.map((p) => [p.id, p]));
+            remoteProjects.forEach((p) => map.set(p.id, p));
+            return Array.from(map.values());
+          });
+        }
+        if (remoteAttachments.length > 0) {
+          setAttachments((prev) => {
+            const map = new Map(prev.map((a) => [a.id, a]));
+            remoteAttachments.forEach((a) => map.set(a.id, a));
+            return Array.from(map.values());
+          });
+        }
+        if (currentUser.role === 'admin') {
+          const [remotePending, remoteUsers] = await Promise.all([
+            fetchPendingRegistrationsFromFirestore(),
+            fetchUsersFromFirestore(),
+          ]);
+          if (!isMounted) return;
+          if (remotePending.length > 0) {
+            setPendingRegistrations((prev) => {
+              const map = new Map(prev.map((p) => [p.id, p]));
+              remotePending.forEach((p) => map.set(p.id, p));
+              return Array.from(map.values());
+            });
+          }
+          if (remoteUsers.length > 0) {
+            setUsers((prev) => {
+              const map = new Map(prev.map((u) => [u.id, u]));
+              remoteUsers.forEach((u) => map.set(u.id, u));
+              return Array.from(map.values());
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error loading remote Firestore data:', err);
+      }
+    };
+    loadRemoteData();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser]);
 
   // Handler: Language switch
   const handleLanguageChange = (newLang: Language) => {

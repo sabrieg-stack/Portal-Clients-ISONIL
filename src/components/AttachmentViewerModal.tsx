@@ -153,14 +153,11 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
   // Native OS Share chooser first; non-automatic fallback modal only if navigator.share is unsupported
   const handleNativeShare = async () => {
     const shareResult = await triggerNativeShare({
-      title: attachment.title,
-      text: `${attachment.title} — ${attachment.projectName} (ISONIL Maroc)`,
-      url: window.location.origin,
+      ...attachment,
       fileUrl: normalizedFileUrl,
-      fileName: attachment.fileName,
     });
 
-    if (shareResult.fallback) {
+    if (shareResult === 'unsupported') {
       setShowShareModal(true);
     }
   };

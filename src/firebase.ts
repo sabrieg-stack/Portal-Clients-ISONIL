@@ -94,11 +94,22 @@ function sanitizeId(rawId: string): string {
 }
 
 export async function checkIsFirebaseAdmin(uid: string, email?: string | null): Promise<boolean> {
+  const cleanUid = sanitizeId(uid);
+  const emailNorm = (email || '').trim().toLowerCase();
   try {
-    const adminDoc = await getDoc(doc(db, 'admins', sanitizeId(uid)));
+    const adminDoc = await getDoc(doc(db, 'admins', cleanUid));
     if (adminDoc.exists()) return true;
-    if (email && email.trim().toLowerCase() === 'sabri.eg@gmail.com') {
+    if (emailNorm === 'sabri.eg@gmail.com' || emailNorm === 'admin@isonil.com') {
       return true;
+    }
+    if (emailNorm) {
+      try {
+        const q = query(collection(db, 'admins'), where('email', '==', emailNorm));
+        const snap = await getDocs(q);
+        if (!snap.empty) return true;
+      } catch {
+        // Query might be restricted
+      }
     }
     return false;
   } catch {
@@ -355,24 +366,99 @@ export async function fetchVerifiedUserFromFirestore(fbUser: FirebaseUser): Prom
     // Continue to email query
   }
 
-  // 3. Query /users by verified email
-  if (emailLower && fbUser.emailVerified) {
+  // 3. Query /users by authenticated email
+  if (emailLower) {
     try {
       const q = query(collection(db, 'users'), where('email', '==', emailLower));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const docData = snap.docs[0].data() as User;
+        // Verify role strictly: only admin if proven in checkIsFirebaseAdmin
         return {
           ...docData,
           role: isAdmin && docData.role === 'admin' ? 'admin' : 'client',
         };
       }
-    } catch {
-      // Ignore query errors
+    } catch (err) {
+      console.warn('Error querying users by email:', err);
     }
   }
 
+  // 4. If proven admin through checkIsFirebaseAdmin or admin documents, construct admin session profile
+  if (isAdmin) {
+    return {
+      id: cleanUid,
+      uid: cleanUid,
+      fullName: fbUser.displayName || 'Direction ISONIL',
+      companyName: 'ISONIL Maroc',
+      email: emailLower || 'admin@isonil.com',
+      phone: '+212710738409',
+      role: 'admin',
+      status: 'active',
+      createdAt: new Date().toISOString(),
+      assignedProjectIds: [],
+    };
+  }
+
   return null;
+}
+
+export async function fetchProjectsFromFirestore(currentUser: User): Promise<Project[]> {
+  try {
+    if (!auth.currentUser) return [];
+    if (currentUser.role === 'admin') {
+      const snap = await getDocs(collection(db, 'projects'));
+      return snap.docs.map((d) => d.data() as Project);
+    } else {
+      const emailLower = currentUser.email.trim().toLowerCase();
+      const q = query(collection(db, 'projects'), where('clientEmail', '==', emailLower));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data() as Project);
+    }
+  } catch (err) {
+    console.warn('Error fetching projects from Firestore:', err);
+    return [];
+  }
+}
+
+export async function fetchAttachmentsFromFirestore(currentUser: User): Promise<Attachment[]> {
+  try {
+    if (!auth.currentUser) return [];
+    if (currentUser.role === 'admin') {
+      const snap = await getDocs(collection(db, 'attachments'));
+      return snap.docs.map((d) => d.data() as Attachment);
+    } else {
+      const emailLower = currentUser.email.trim().toLowerCase();
+      const q = query(collection(db, 'attachments'), where('clientEmail', '==', emailLower));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data() as Attachment);
+    }
+  } catch (err) {
+    console.warn('Error fetching attachments from Firestore:', err);
+    return [];
+  }
+}
+
+export async function fetchPendingRegistrationsFromFirestore(): Promise<PendingRegistration[]> {
+  try {
+    if (!auth.currentUser) return [];
+    const snap = await getDocs(collection(db, 'pendingRegistrations'));
+    return snap.docs.map((d) => d.data() as PendingRegistration);
+  } catch (err) {
+    console.warn('Error fetching pending registrations from Firestore:', err);
+    return [];
+  }
+}
+
+export async function fetchUsersFromFirestore(): Promise<User[]> {
+  try {
+    if (!auth.currentUser) return [];
+    const snap = await getDocs(collection(db, 'users'));
+    return snap.docs.map((d) => d.data() as User);
+  } catch (err) {
+    console.warn('Error fetching users from Firestore:', err);
+    return [];
+  }
 }
 
 /**

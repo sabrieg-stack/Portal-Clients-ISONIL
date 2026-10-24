@@ -21,6 +21,7 @@ import {
   googleProvider,
   signInWithPopup,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   firebaseSignOut,
   checkIsFirebaseAdmin,
   registerAdminInFirestore,
@@ -136,13 +137,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       // Step B: Try Firebase Auth Email/Password sign-in if configured on the Firebase project
       let fbAuthenticatedUser: User | null = null;
+      let fbErrorCode: string | null = null;
       try {
         const fbCred = await signInWithEmailAndPassword(auth, emailTrim, passwordVal);
         if (fbCred.user) {
           fbAuthenticatedUser = await fetchVerifiedUserFromFirestore(fbCred.user);
         }
-      } catch {
-        // Proceed to verify against verified portal user records if Firebase Email/Password provider is not used for this user
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'code' in err) {
+          fbErrorCode = String((err as { code: string }).code);
+        }
+      }
+
+      if (fbErrorCode === 'auth/unauthorized-domain') {
+        setLoginError(
+          lang === 'ar'
+            ? 'النطاق الحالي (isonil.com) غير مصرح به في إعدادات Firebase Console. يرجى إضافة نطاق الموقع إلى Authorized Domains في Firebase Console.'
+            : 'Le domaine (isonil.com) n\'est pas autorisé dans Firebase Console. Veuillez l\'ajouter dans Authentication > Settings > Authorized domains.'
+        );
+        return;
       }
 
       // Step C: Match against verified user records
@@ -175,6 +188,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           return;
         }
 
+        // Connect user to Firebase Auth if not already connected
+        if (!fbAuthenticatedUser && passwordVal.length >= 6) {
+          try {
+            const cred = await createUserWithEmailAndPassword(auth, emailTrim, passwordVal);
+            if (cred.user) {
+              matchedUser.uid = cred.user.uid;
+              syncUserToFirestore(matchedUser, cred.user.uid).catch(() => {});
+            }
+          } catch {
+            // ignore if already exists or blocked
+          }
+        }
+
         onLoginSuccess({
           ...matchedUser,
           role: matchedUser.role === 'admin' ? 'admin' : 'client',
@@ -183,7 +209,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       // Step D: Check if the email belongs to the opposite role to provide a clear RBAC error
-      const wrongRoleUser = users.find((u) => u.email.trim().toLowerCase() === emailTrim);
+      const wrongRoleUser =
+        (fbAuthenticatedUser && fbAuthenticatedUser.role !== targetRole ? fbAuthenticatedUser : null) ||
+        users.find((u) => u.email.trim().toLowerCase() === emailTrim);
+
       if (wrongRoleUser) {
         setLoginError(
           targetRole === 'admin'
@@ -199,8 +228,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       // Step E: If Admin tab is used when no admin account has been registered yet, initialize the first admin account
       if (targetRole === 'admin' && existingAdmins.length === 0 && passwordVal.length >= 6) {
+        let adminUid = auth.currentUser?.uid;
+        if (!adminUid) {
+          try {
+            const cred = await createUserWithEmailAndPassword(auth, emailTrim, passwordVal);
+            adminUid = cred.user.uid;
+          } catch (createErr: unknown) {
+            const cCode = createErr && typeof createErr === 'object' && 'code' in createErr ? String((createErr as { code: string }).code) : '';
+            if (cCode === 'auth/email-already-in-use') {
+              try {
+                const cred = await signInWithEmailAndPassword(auth, emailTrim, passwordVal);
+                adminUid = cred.user.uid;
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
         const newAdmin = await registerAdminInFirestore({
-          uid: auth.currentUser?.uid || `admin-${Date.now()}`,
+          uid: adminUid || `admin-${Date.now()}`,
           email: emailTrim,
           fullName: emailTrim.split('@')[0] || 'Direction ISONIL',
           companyName: 'ISONIL Maroc',
@@ -259,7 +305,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsSubmittingAuth(true);
     try {
-      const adminId = auth.currentUser?.uid || `admin-${Date.now()}`;
+      let adminUid = auth.currentUser?.uid;
+      if (!adminUid) {
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, emailTrim, adminSetupPassword);
+          adminUid = cred.user.uid;
+        } catch (createErr: unknown) {
+          const cCode = createErr && typeof createErr === 'object' && 'code' in createErr ? String((createErr as { code: string }).code) : '';
+          if (cCode === 'auth/email-already-in-use') {
+            try {
+              const cred = await signInWithEmailAndPassword(auth, emailTrim, adminSetupPassword);
+              adminUid = cred.user.uid;
+            } catch {
+              // ignore
+            }
+          } else if (cCode === 'auth/unauthorized-domain') {
+            setLoginError(
+              lang === 'ar'
+                ? 'النطاق الحالي (isonil.com) غير مصرح به في إعدادات Firebase Console. يرجى إضافة نطاق الموقع إلى Authorized Domains في Firebase Console.'
+                : 'Le domaine (isonil.com) n\'est pas autorisé dans Firebase Console. Veuillez l\'ajouter dans Authentication > Settings > Authorized domains.'
+            );
+            return;
+          }
+        }
+      }
+
+      const adminId = adminUid || `admin-${Date.now()}`;
       const newAdmin = await registerAdminInFirestore({
         uid: adminId,
         email: emailTrim,
@@ -417,11 +488,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (!msg.includes('auth/popup-closed-by-user')) {
-        setLoginError(
-          lang === 'ar'
-            ? 'تعذر إتمام تسجيل الدخول عبر Google. يرجى استخدام البريد الإلكتروني وكلمة المرور.'
-            : 'Échec de connexion Google. Veuillez utiliser votre e-mail et mot de passe.'
-        );
+        if (msg.includes('auth/unauthorized-domain')) {
+          setLoginError(
+            lang === 'ar'
+              ? 'النطاق الحالي (isonil.com) غير مصرح به في Firebase Console. يرجى إضافته في Authentication > Settings > Authorized domains.'
+              : 'Le domaine (isonil.com) n\'est pas autorisé dans Firebase Console. Veuillez l\'ajouter dans Authentication > Settings > Authorized domains.'
+          );
+        } else {
+          setLoginError(
+            lang === 'ar'
+              ? 'تعذر إتمام تسجيل الدخول عبر Google. يرجى استخدام البريد الإلكتروني وكلمة المرور.'
+              : 'Échec de connexion Google. Veuillez utiliser votre e-mail et mot de passe.'
+          );
+        }
       }
     } finally {
       setIsSubmittingAuth(false);

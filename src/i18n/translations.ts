@@ -198,6 +198,15 @@ export const translations = {
     resetEmailSentTitle: 'تم إرسال الرابط الإلكتروني',
     resetEmailSentDesc: 'تم إرسال رسالة بريدية تتضمن رابطاً آمناً لتعديل كلمة السر. يرجى مراجعة صندوق الوارد.',
     backToLogin: 'العودة لصفحة الدخول',
+    passwordMismatch: 'كلمتا المرور غير متطابقتين. يرجى إعادة التحقق.',
+    confirmPasswordLabel: 'تأكيد كلمة المرور',
+    passwordResetSuccessAlert: 'تم تعيين كلمة المرور الجديدة بنجاح! يمكنكم الآن تسجيل الدخول بها.',
+    simulatedEmailSubject: 'رابط استعادة كلمة المرور - بوابة ISONIL',
+    clickHereToReset: 'انقر هنا لإعادة تعيين كلمة المرور',
+    resetPasswordTitle: 'تعيين كلمة مرور جديدة',
+    resetPasswordDesc: 'يرجى إدخال كلمة المرور الجديدة وتأكيدها للمتابعة.',
+    newPasswordLabel: 'كلمة المرور الجديدة',
+    applyNewPasswordBtn: 'تطبيق وحفظ كلمة المرور الجديدة',
 
     // Admin Dashboard
     adminOverview: 'ملخص البوابة والمشاريع',
@@ -253,6 +262,25 @@ export const translations = {
     statusInProgress: 'قيد التنفيذ الميداني',
     statusCompleted: 'مكتمل ومؤرشف',
     statusMaintenance: 'تحت الصيانة الدورية',
+
+    // Folders & Project dossiers
+    customFolders: 'المجلدات المخصصة',
+    addCustomFolder: 'إضافة مجلد مخصص جديد',
+    deleteAttachment: 'حذف المرفق',
+    backToProjectsGrid: 'الرجوع إلى شبكة المشاريع',
+    openProjectDossier: 'فتح ملف وسجل المشروع',
+    folderNamePlaceholder: 'اسم المجلد (مثال: تقارير الفحص الحراري)...',
+    createFolderBtn: 'إنشاء المجلد',
+
+    // Dispatch & WhatsApp channels
+    whatsappPreviewMessage: 'مرحباً، نرفق لكم وثيقة معتمدة بخصوص مشروعكم لدى إيزونيل المغرب.',
+    whatsappSendBtn: 'إرسال إشعار عبر واتساب',
+    registeredEmail: 'البريد المسجل',
+    registeredPhone: 'الهاتف المسجل',
+    dispatchChannelTitle: 'قنوات التوجيه والإشعار',
+    dispatchChannelEmail: 'عبر البريد فقط',
+    dispatchChannelWhatsapp: 'عبر واتساب فقط',
+    dispatchChannelBoth: 'البريد + واتساب معاً',
   },
 
   fr: {
@@ -454,6 +482,15 @@ export const translations = {
     resetEmailSentTitle: 'Courriel de réinitialisation envoyé',
     resetEmailSentDesc: 'Un e-mail contenant un lien sécurisé a été généré et transmis. Veuillez consulter votre boîte de réception.',
     backToLogin: 'Retour à la page de connexion',
+    passwordMismatch: 'Les deux mots de passe ne correspondent pas. Veuillez vérifier.',
+    confirmPasswordLabel: 'Confirmer le mot de passe',
+    passwordResetSuccessAlert: 'Nouveau mot de passe enregistré avec succès ! Vous pouvez à présent vous connecter.',
+    simulatedEmailSubject: 'Réinitialisation de votre mot de passe - Portail ISONIL',
+    clickHereToReset: 'Cliquez ici pour réinitialiser votre mot de passe',
+    resetPasswordTitle: 'Définir un nouveau mot de passe',
+    resetPasswordDesc: 'Veuillez saisir votre nouveau mot de passe et le confirmer ci-dessous.',
+    newPasswordLabel: 'Nouveau mot de passe',
+    applyNewPasswordBtn: 'Enregistrer le nouveau mot de passe',
 
     // Admin Dashboard
     adminOverview: 'Synthèse du Portail et des Projets',
@@ -509,5 +546,24 @@ export const translations = {
     statusInProgress: 'En cours de réalisation',
     statusCompleted: 'Achevé et archivé',
     statusMaintenance: 'Sous contrat de maintenance',
+
+    // Folders & Project dossiers
+    customFolders: 'Dossiers personnalisés',
+    addCustomFolder: 'Ajouter un dossier personnalisé',
+    deleteAttachment: 'Supprimer la pièce jointe',
+    backToProjectsGrid: 'Retour à la grille des chantiers',
+    openProjectDossier: 'Consulter le dossier du projet',
+    folderNamePlaceholder: 'Nom du dossier (ex: Rapports thermographiques)...',
+    createFolderBtn: 'Créer le dossier',
+
+    // Dispatch & WhatsApp channels
+    whatsappPreviewMessage: 'Bonjour, nous vous transmettons un document officiel concernant votre chantier chez ISONIL Maroc.',
+    whatsappSendBtn: 'Notifier via WhatsApp',
+    registeredEmail: 'E-mail enregistré',
+    registeredPhone: 'Téléphone enregistré',
+    dispatchChannelTitle: "Canaux d'expédition",
+    dispatchChannelEmail: 'E-mail uniquement',
+    dispatchChannelWhatsapp: 'WhatsApp uniquement',
+    dispatchChannelBoth: 'E-mail + WhatsApp',
   },
 };

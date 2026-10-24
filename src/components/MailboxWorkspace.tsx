@@ -200,13 +200,10 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
         ? '/1000127391_10ae27f3.jpg'
         : att.fileUrl;
     const res = await triggerNativeShare({
-      title: att.title,
-      text: `${att.title} — ${att.projectName} (ISONIL Maroc)`,
-      url: window.location.origin,
+      ...att,
       fileUrl: normalizedUrl,
-      fileName: att.fileName,
     });
-    if (res.fallback) {
+    if (res === 'unsupported') {
       onOpenViewer(att);
     }
   };

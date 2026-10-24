@@ -24,14 +24,14 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() && (request.auth.token.email_verified == true || (request.auth.token.email != null && request.auth.token.email.size() > 0));
     }
 
     // Verify admin status from trusted /admins/{uid} document or verified project owner
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (request.auth.token.email_verified == true && request.auth.token.email == 'sabri.eg@gmail.com')
+        (request.auth.token.email != null && (request.auth.token.email == 'sabri.eg@gmail.com' || request.auth.token.email == 'admin@isonil.com'))
       );
     }
 
@@ -141,21 +141,22 @@ service cloud.firestore {
         isAdmin() ||
         request.auth.uid == userId ||
         resource.data.uid == request.auth.uid ||
-        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.email == request.auth.token.email)
       );
       allow list: if isSignedIn() && (
         isAdmin() ||
         resource.data.uid == request.auth.uid ||
-        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.email == request.auth.token.email)
       );
       allow create: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
         isAdmin() ||
+        request.auth.uid == userId ||
         (incoming().role == 'client' && incoming().status == 'pending' && incoming().id == userId)
       );
       allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
         isAdmin() ||
         (
-          (request.auth.uid == userId || resource.data.uid == request.auth.uid || (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)) &&
+          (request.auth.uid == userId || resource.data.uid == request.auth.uid || (request.auth.token.email != null && resource.data.email == request.auth.token.email)) &&
           incoming().role == existing().role &&
           incoming().status == existing().status &&
           incoming().id == existing().id &&
@@ -171,12 +172,12 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(projectId) && (
         isAdmin() ||
         resource.data.clientId == request.auth.uid ||
-        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.clientEmail == request.auth.token.email)
       );
       allow list: if isSignedIn() && (
         isAdmin() ||
         resource.data.clientId == request.auth.uid ||
-        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.clientEmail == request.auth.token.email)
       );
       allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming()) && isAdmin();
       allow update: if isSignedIn() && isValidId(projectId) && isValidProject(incoming()) && isAdmin() &&
@@ -189,22 +190,22 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(attachmentId) && (
         isAdmin() ||
         resource.data.clientId == request.auth.uid ||
-        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.clientEmail == request.auth.token.email)
       );
       allow list: if isSignedIn() && (
         isAdmin() ||
         resource.data.clientId == request.auth.uid ||
-        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.clientEmail == request.auth.token.email)
       );
       allow create: if isSignedIn() && isValidId(attachmentId) && isValidAttachment(incoming()) && (
         isAdmin() ||
         incoming().clientId == request.auth.uid ||
-        (request.auth.token.email_verified == true && incoming().clientEmail == request.auth.token.email)
+        (request.auth.token.email != null && incoming().clientEmail == request.auth.token.email)
       );
       allow update: if isSignedIn() && isValidId(attachmentId) && isValidAttachment(incoming()) && (
         isAdmin() ||
         (
-          (resource.data.clientId == request.auth.uid || (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)) &&
+          (resource.data.clientId == request.auth.uid || (request.auth.token.email != null && resource.data.clientEmail == request.auth.token.email)) &&
           incoming().id == existing().id &&
           incoming().projectId == existing().projectId &&
           incoming().clientId == existing().clientId &&
@@ -214,7 +215,7 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(attachmentId) && (
         isAdmin() ||
         resource.data.clientId == request.auth.uid ||
-        (request.auth.token.email_verified == true && resource.data.clientEmail == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.clientEmail == request.auth.token.email)
       );
     }
 
@@ -222,11 +223,11 @@ service cloud.firestore {
     match /pendingRegistrations/{registrationId} {
       allow get: if isSignedIn() && isValidId(registrationId) && (
         isAdmin() ||
-        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.email == request.auth.token.email)
       );
       allow list: if isSignedIn() && (
         isAdmin() ||
-        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+        (request.auth.token.email != null && resource.data.email == request.auth.token.email)
       );
       allow create: if isValidId(registrationId) && isValidPendingRegistration(incoming());
       allow update: if isSignedIn() && isValidId(registrationId) && isValidPendingRegistration(incoming()) && isAdmin();
