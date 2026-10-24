@@ -4,9 +4,11 @@ export type UserRole = 'client' | 'admin';
 
 export type AccountStatus = 'active' | 'pending' | 'suspended';
 
-export type LayoutModel = 'horizontal' | 'sidebar' | 'grid' | 'timeline' | 'compact';
+export type LayoutModel = 'classic' | 'vertical-cards' | 'creative';
 
-export type ThemeColor = 'beige' | 'silver' | 'bronze' | 'navy' | 'emerald';
+export type ThemeColor = 'white' | 'charcoal-navy' | 'petroleum-green' | 'isonil-original';
+
+export type IconSize = 'small' | 'medium' | 'large';
 
 export interface User {
   id: string;

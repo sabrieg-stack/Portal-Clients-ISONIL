@@ -1,4 +1,4 @@
-import { User, Project, Attachment, PendingRegistration, NotificationItem, BackupSnapshot, ThemeColor, LayoutModel } from '../types';
+import { User, Project, Attachment, PendingRegistration, NotificationItem, BackupSnapshot, ThemeColor, LayoutModel, IconSize } from '../types';
 
 export const INITIAL_USERS: User[] = [
   {
@@ -103,8 +103,9 @@ const ATTACHMENTS_STORAGE_KEY = 'isonil_portal_attachments_v4';
 const PENDING_STORAGE_KEY = 'isonil_portal_pending_v4';
 const NOTIFICATIONS_STORAGE_KEY = 'isonil_portal_notifications_v4';
 const BACKUPS_STORAGE_KEY = 'isonil_portal_backups_v4';
-const THEME_STORAGE_KEY = 'isonil_portal_theme_v4';
-const LAYOUT_STORAGE_KEY = 'isonil_portal_layout_v4';
+const THEME_STORAGE_KEY = 'isonil_portal_theme_v5';
+const LAYOUT_STORAGE_KEY = 'isonil_portal_layout_v5';
+const ICON_SIZE_STORAGE_KEY = 'isonil_portal_icon_size_v1';
 const SESSION_STORAGE_KEY = 'isonil_portal_session_v4';
 
 export function loadStoredUsers(): User[] {
@@ -315,13 +316,13 @@ export function saveStoredBackups(backups: BackupSnapshot[]) {
 export function loadStoredTheme(): ThemeColor {
   try {
     const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    if (raw === 'beige' || raw === 'silver' || raw === 'bronze' || raw === 'navy' || raw === 'emerald') {
+    if (raw === 'white' || raw === 'charcoal-navy' || raw === 'petroleum-green' || raw === 'isonil-original') {
       return raw;
     }
   } catch (e) {
     console.error('Error loading theme', e);
   }
-  return 'beige';
+  return 'isonil-original';
 }
 
 export function saveStoredTheme(theme: ThemeColor) {
@@ -335,13 +336,13 @@ export function saveStoredTheme(theme: ThemeColor) {
 export function loadStoredLayout(): LayoutModel {
   try {
     const raw = localStorage.getItem(LAYOUT_STORAGE_KEY);
-    if (raw === 'horizontal' || raw === 'sidebar' || raw === 'grid' || raw === 'timeline' || raw === 'compact') {
+    if (raw === 'classic' || raw === 'vertical-cards' || raw === 'creative') {
       return raw;
     }
   } catch (e) {
     console.error('Error loading layout', e);
   }
-  return 'horizontal';
+  return 'classic';
 }
 
 export function saveStoredLayout(layout: LayoutModel) {
@@ -349,5 +350,25 @@ export function saveStoredLayout(layout: LayoutModel) {
     localStorage.setItem(LAYOUT_STORAGE_KEY, layout);
   } catch (e) {
     console.error('Error saving layout', e);
+  }
+}
+
+export function loadStoredIconSize(): IconSize {
+  try {
+    const raw = localStorage.getItem(ICON_SIZE_STORAGE_KEY);
+    if (raw === 'small' || raw === 'medium' || raw === 'large') {
+      return raw;
+    }
+  } catch (e) {
+    console.error('Error loading icon size', e);
+  }
+  return 'medium';
+}
+
+export function saveStoredIconSize(size: IconSize) {
+  try {
+    localStorage.setItem(ICON_SIZE_STORAGE_KEY, size);
+  } catch (e) {
+    console.error('Error saving icon size', e);
   }
 }

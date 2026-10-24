@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Language, User, Project, Attachment, PendingRegistration, LayoutModel, ThemeColor, NotificationItem, BackupSnapshot } from './types';
+import { Language, User, Project, Attachment, PendingRegistration, LayoutModel, ThemeColor, IconSize, NotificationItem, BackupSnapshot } from './types';
 import { translations } from './i18n/translations';
 import { 
   loadStoredUsers, 
@@ -18,6 +18,8 @@ import {
   saveStoredTheme,
   loadStoredLayout,
   saveStoredLayout,
+  loadStoredIconSize,
+  saveStoredIconSize,
   loadVerifiedStoredSession,
   saveStoredCurrentSession
 } from './data/mockData';
@@ -28,10 +30,12 @@ import { MailboxWorkspace } from './components/MailboxWorkspace';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AttachmentViewerModal } from './components/AttachmentViewerModal';
 import { UploadModal } from './components/UploadModal';
+import { UnauthorizedView } from './components/UnauthorizedView';
 import {
   auth,
   onAuthStateChanged,
   firebaseSignOut,
+  checkIsFirebaseAdmin,
   fetchVerifiedUserFromFirestore,
   fetchProjectsFromFirestore,
   fetchAttachmentsFromFirestore,
@@ -45,12 +49,71 @@ import {
   deletePendingRegistrationFromFirestore,
 } from './firebase';
 
-const THEME_HEX: Record<ThemeColor, { accent: string; hover: string; glow: string; border: string; contrast: string }> = {
-  beige: { accent: '#DFC57B', hover: '#d4b663', glow: 'rgba(223, 197, 123, 0.22)', border: 'rgba(223, 197, 123, 0.45)', contrast: '#0B192C' },
-  silver: { accent: '#A9DDF1', hover: '#79C8E8', glow: 'rgba(169, 221, 241, 0.22)', border: 'rgba(169, 221, 241, 0.45)', contrast: '#0B192C' },
-  bronze: { accent: '#f59e0b', hover: '#d97706', glow: 'rgba(245, 158, 11, 0.25)', border: 'rgba(245, 158, 11, 0.45)', contrast: '#0B192C' },
-  navy: { accent: '#79C8E8', hover: '#38bdf8', glow: 'rgba(121, 200, 232, 0.25)', border: 'rgba(121, 200, 232, 0.45)', contrast: '#0B192C' },
-  emerald: { accent: '#10b981', hover: '#059669', glow: 'rgba(16, 185, 129, 0.25)', border: 'rgba(16, 185, 129, 0.45)', contrast: '#ffffff' },
+const THEME_HEX: Record<ThemeColor, { 
+  accent: string; 
+  hover: string; 
+  glow: string; 
+  border: string; 
+  contrast: string;
+  bgMain: string;
+  bgSurface: string;
+  bgSubtle: string;
+  bgHover: string;
+  textMain: string;
+  textMuted: string;
+}> = {
+  'white': { 
+    accent: '#DFC57B', 
+    hover: '#C9AF66', 
+    glow: 'rgba(223, 197, 123, 0.25)', 
+    border: '#CBD5E1', 
+    contrast: '#172B3A',
+    bgMain: '#FFFFFF',
+    bgSurface: '#F8FAFC',
+    bgSubtle: '#F1F5F9',
+    bgHover: '#E2E8F0',
+    textMain: '#172B3A',
+    textMuted: '#475569',
+  },
+  'charcoal-navy': { 
+    accent: '#DFC57B', 
+    hover: '#d4b663', 
+    glow: 'rgba(223, 197, 123, 0.22)', 
+    border: 'rgba(121, 200, 232, 0.35)', 
+    contrast: '#0B192C',
+    bgMain: '#26313A',
+    bgSurface: '#1E272E',
+    bgSubtle: '#192026',
+    bgHover: '#323F49',
+    textMain: '#FFFFFF',
+    textMuted: '#94A3B8',
+  },
+  'petroleum-green': { 
+    accent: '#B8E0D8', 
+    hover: '#9FD3C7', 
+    glow: 'rgba(184, 224, 216, 0.25)', 
+    border: 'rgba(184, 224, 216, 0.38)', 
+    contrast: '#0E433D',
+    bgMain: '#14564F',
+    bgSurface: '#0E433D',
+    bgSubtle: '#09322D',
+    bgHover: '#1A6961',
+    textMain: '#FFFFFF',
+    textMuted: '#CBD5E1',
+  },
+  'isonil-original': { 
+    accent: '#DFC57B', 
+    hover: '#d4b663', 
+    glow: 'rgba(223, 197, 123, 0.22)', 
+    border: 'rgba(121, 200, 232, 0.45)', 
+    contrast: '#0B192C',
+    bgMain: '#0B192C',
+    bgSurface: '#112239',
+    bgSubtle: '#071220',
+    bgHover: '#162942',
+    textMain: '#FFFFFF',
+    textMuted: '#94A3B8',
+  },
 };
 
 const checkIsAdminRoute = (): boolean => {
@@ -82,11 +145,14 @@ export default function App() {
   // 2. Cinematic Welcome Splash
   const [showCinematic, setShowCinematic] = useState<boolean>(true);
 
-  // 3. Layout Model (5 actual design choices user can switch between)
+  // 3. Layout Model (3 design choices: classic, vertical-cards, creative)
   const [layoutModel, setLayoutModel] = useState<LayoutModel>(() => loadStoredLayout());
 
-  // 4. Color Theme (100% dynamic CSS variable synchronization)
+  // 4. Color Theme (4 comprehensive themes)
   const [themeColor, setThemeColor] = useState<ThemeColor>(() => loadStoredTheme());
+
+  // 4.1 Icon Size (small, medium, large)
+  const [iconSize, setIconSize] = useState<IconSize>(() => loadStoredIconSize());
 
   // 5. Clean Core Data Stores
   const [users, setUsers] = useState<User[]>(() => loadStoredUsers());
@@ -101,8 +167,11 @@ export default function App() {
     return loadVerifiedStoredSession();
   });
 
-  // 7. Admin active sub-view: default to 'dashboard' for administrators
-  const [activeAdminSubView, setActiveAdminSubView] = useState<'dashboard' | 'workspace'>('dashboard');
+  // 7. Admin active sub-view: strictly check if current verified session has admin role
+  const [activeAdminSubView, setActiveAdminSubView] = useState<'dashboard' | 'workspace'>(() => {
+    const session = loadVerifiedStoredSession();
+    return session?.role === 'admin' ? 'dashboard' : 'workspace';
+  });
 
   // 8. Modals
   const [selectedAttachmentForViewer, setSelectedAttachmentForViewer] = useState<Attachment | null>(null);
@@ -167,14 +236,26 @@ export default function App() {
   // Sync active theme color attribute & CSS custom variables dynamically
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeColor);
-    const themeDef = THEME_HEX[themeColor] || THEME_HEX.beige;
+    const themeDef = THEME_HEX[themeColor] || THEME_HEX['isonil-original'];
     document.documentElement.style.setProperty('--theme-accent', themeDef.accent);
     document.documentElement.style.setProperty('--theme-accent-hover', themeDef.hover);
     document.documentElement.style.setProperty('--theme-accent-glow', themeDef.glow);
     document.documentElement.style.setProperty('--theme-accent-border', themeDef.border);
     document.documentElement.style.setProperty('--theme-text-contrast', themeDef.contrast);
+    document.documentElement.style.setProperty('--bg-main', themeDef.bgMain);
+    document.documentElement.style.setProperty('--bg-surface', themeDef.bgSurface);
+    document.documentElement.style.setProperty('--bg-subtle', themeDef.bgSubtle);
+    document.documentElement.style.setProperty('--bg-hover', themeDef.bgHover);
+    document.documentElement.style.setProperty('--text-main', themeDef.textMain);
+    document.documentElement.style.setProperty('--text-muted', themeDef.textMuted);
     saveStoredTheme(themeColor);
   }, [themeColor]);
+
+  // Sync icon size attribute & persistence
+  useEffect(() => {
+    document.documentElement.setAttribute('data-icon-size', iconSize);
+    saveStoredIconSize(iconSize);
+  }, [iconSize]);
 
   // Persist layout model
   useEffect(() => {
@@ -206,48 +287,81 @@ export default function App() {
     saveStoredBackups(backups);
   }, [backups]);
 
-  // Listen to Firebase Auth state changes and verify role strictly from Firestore / verified records
+  // Listen to Firebase Auth state changes and explicitly verify role from Firestore database
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (!fbUser) return;
+      if (!fbUser) {
+        // Clear active session if user signed out of Firebase
+        setCurrentUser((prev) => {
+          if (prev?.uid) {
+            saveStoredCurrentSession(null);
+            return null;
+          }
+          return prev;
+        });
+        return;
+      }
+
       try {
+        // Explicitly verify user and role from Firestore database
         const verifiedRemoteUser = await fetchVerifiedUserFromFirestore(fbUser);
-        if (verifiedRemoteUser && verifiedRemoteUser.status === 'active') {
+        
+        if (verifiedRemoteUser) {
+          // Check if account was suspended
+          if (verifiedRemoteUser.status === 'suspended') {
+            await firebaseSignOut(auth).catch(() => {});
+            saveStoredCurrentSession(null);
+            setCurrentUser(null);
+            return;
+          }
+
+          // Strict role determination verified against Firestore
+          const isVerifiedAdmin =
+            verifiedRemoteUser.role === 'admin' &&
+            (await checkIsFirebaseAdmin(fbUser.uid, fbUser.email));
+          const verifiedRole: 'admin' | 'client' = isVerifiedAdmin ? 'admin' : 'client';
+
+          const resolvedUser: User = {
+            ...verifiedRemoteUser,
+            uid: fbUser.uid,
+            role: verifiedRole,
+          };
+
+          // Update users cache
           setUsers((prev) => {
             const exists = prev.some(
-              (u) => u.id === verifiedRemoteUser.id || u.email.toLowerCase() === verifiedRemoteUser.email.toLowerCase()
+              (u) => u.id === resolvedUser.id || u.email.toLowerCase() === resolvedUser.email.toLowerCase()
             );
             if (exists) {
               return prev.map((u) =>
-                u.id === verifiedRemoteUser.id || u.email.toLowerCase() === verifiedRemoteUser.email.toLowerCase()
-                  ? { ...u, ...verifiedRemoteUser, uid: fbUser.uid }
+                u.id === resolvedUser.id || u.email.toLowerCase() === resolvedUser.email.toLowerCase()
+                  ? { ...u, ...resolvedUser }
                   : u
               );
             }
-            return [...prev, { ...verifiedRemoteUser, uid: fbUser.uid }];
+            return [...prev, resolvedUser];
           });
-          setCurrentUser((prevCurrent) => {
-            if (prevCurrent && prevCurrent.email.toLowerCase() === verifiedRemoteUser.email.toLowerCase()) {
-              return prevCurrent;
-            }
-            const verifiedRole = verifiedRemoteUser.role === 'admin' ? 'admin' : 'client';
-            saveStoredCurrentSession({
-              userId: verifiedRemoteUser.id,
-              email: verifiedRemoteUser.email,
-              role: verifiedRole,
-              loginAt: new Date().toISOString(),
-            });
-            if (verifiedRole === 'admin') {
-              setActiveAdminSubView('dashboard');
-            }
-            return {
-              ...verifiedRemoteUser,
-              role: verifiedRole,
-            };
+
+          // Prevent automatic admin dashboard entry for client-role accounts
+          if (verifiedRole === 'client') {
+            setActiveAdminSubView('workspace');
+          } else if (verifiedRole === 'admin') {
+            setActiveAdminSubView((current) => (current === 'workspace' ? 'workspace' : 'dashboard'));
+          }
+
+          // Save strictly verified role to session storage
+          saveStoredCurrentSession({
+            userId: resolvedUser.id,
+            email: resolvedUser.email,
+            role: verifiedRole,
+            loginAt: new Date().toISOString(),
           });
+
+          // Explicitly update currentUser state with verified role from Firestore (never keep unverified prevCurrent role)
+          setCurrentUser(resolvedUser);
         }
       } catch (err) {
-        console.error('Error verifying Firebase session:', err);
+        console.error('Error verifying Firebase session with Firestore:', err);
       }
     });
     return () => unsubscribe();
@@ -332,25 +446,44 @@ export default function App() {
     });
   };
 
+  // Handler: Admin Sub-View Switch (enforces admin privilege check before switching to dashboard)
+  const handleAdminSubViewChange = (view: 'dashboard' | 'workspace') => {
+    if (currentUser?.role !== 'admin') {
+      setActiveAdminSubView('workspace');
+      return;
+    }
+    setActiveAdminSubView(view);
+  };
+
   // Handler: Login Success (determines role strictly from authenticated account and verified permissions)
-  const handleLoginSuccess = (user: User) => {
-    const verified = users.find(
-      (u) => u.id === user.id || u.email.trim().toLowerCase() === user.email.trim().toLowerCase()
-    );
-    const validUser = verified ? { ...verified, ...user, role: verified.role } : user;
+  const handleLoginSuccess = async (user: User) => {
+    let verifiedRole: 'admin' | 'client' = user.role === 'admin' ? 'admin' : 'client';
+    if (verifiedRole === 'admin') {
+      const isActuallyAdmin = await checkIsFirebaseAdmin(user.uid || user.id, user.email);
+      if (!isActuallyAdmin) {
+        verifiedRole = 'client';
+      }
+    }
+
     const authenticatedUser: User = {
-      ...validUser,
-      role: validUser.role === 'admin' ? 'admin' : 'client',
+      ...user,
+      role: verifiedRole,
     };
+
     saveStoredCurrentSession({
       userId: authenticatedUser.id,
       email: authenticatedUser.email,
-      role: authenticatedUser.role,
+      role: verifiedRole,
       loginAt: new Date().toISOString(),
     });
-    if (authenticatedUser.role === 'admin') {
+
+    if (verifiedRole === 'admin') {
       setActiveAdminSubView('dashboard');
+    } else {
+      // Explicitly prevent automatic admin dashboard entry for client-role accounts
+      setActiveAdminSubView('workspace');
     }
+
     setCurrentUser(authenticatedUser);
     setShowAuthModalManually(false);
   };
@@ -772,7 +905,7 @@ export default function App() {
         isAdminPortalRoute={isAdminPortalRoute}
         onNavigateToClientRoute={navigateToClientRoute}
         activeAdminSubView={activeAdminSubView}
-        onAdminSubViewChange={setActiveAdminSubView}
+        onAdminSubViewChange={handleAdminSubViewChange}
         onLogout={handleLogout}
         onShowAuthModal={() => setShowAuthModalManually(true)}
         canGoBack={currentUser !== null && currentUser.role === 'admin' && activeAdminSubView === 'dashboard'}
@@ -781,6 +914,8 @@ export default function App() {
         onLayoutChange={setLayoutModel}
         themeColor={themeColor}
         onThemeChange={setThemeColor}
+        iconSize={iconSize}
+        onIconSizeChange={setIconSize}
         notifications={notifications}
         onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
         onSelectNotification={handleSelectNotification}
@@ -802,6 +937,18 @@ export default function App() {
             onNavigateToAdminRoute={navigateToAdminRoute}
             onNavigateToClientRoute={navigateToClientRoute}
             showAdminLinkOnClient={showAdminLinkOnClient}
+          />
+        ) : currentUser.role !== 'admin' && isAdminPortalRoute ? (
+          /* DEDICATED UNAUTHORIZED STATE: Client account attempting to access admin route */
+          <UnauthorizedView
+            lang={lang}
+            currentUser={currentUser}
+            attemptedPath={window.location.hash || '/#admin'}
+            onReturnToClientWorkspace={navigateToClientRoute}
+            onSignOutAndSwitchAccount={async () => {
+              await handleLogout();
+              navigateToAdminRoute();
+            }}
           />
         ) : currentUser.role === 'admin' ? (
           <div>
@@ -830,6 +977,7 @@ export default function App() {
                 clientProjects={projects}
                 attachments={attachments}
                 layoutModel={layoutModel}
+                iconSize={iconSize}
                 onLayoutChange={setLayoutModel}
                 onOpenViewer={(att) => setSelectedAttachmentForViewer(att)}
                 onOpenUpload={(projId) => {
@@ -851,6 +999,7 @@ export default function App() {
             clientProjects={clientProjects}
             attachments={clientAttachments}
             layoutModel={layoutModel}
+            iconSize={iconSize}
             onLayoutChange={setLayoutModel}
             onOpenViewer={(att) => setSelectedAttachmentForViewer(att)}
             onOpenUpload={(projId) => {

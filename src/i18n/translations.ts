@@ -20,27 +20,28 @@ export const translations = {
     workingHoursVal: 'الإثنين - الجمعة: 08:30 - 18:00',
     headquartersAddressLabel: 'المقر والمكتب الهندسي',
 
-    // 5 Design Layout Models (Dropdown)
-    layoutModelsTitle: 'اختر نموذج العرض والهيكل (5 نماذج):',
-    layoutHorizontal: '1. القائمة الرأسية العلوية (Horizontal Stream)',
-    layoutSidebar: '2. القائمة الجانبية الكلاسيكية (Classic Split)',
-    layoutGrid: '3. شبكة بطاقات المشاريع التفاعلية (Card Grid)',
-    layoutTimeline: '4. الأرشيف الزمني للأحداث (Timeline Dossier)',
-    layoutCompact: '5. جدول البيانات المدمج عالي الكثافة (Compact Data)',
+    // 3 Sidebar / Layout Modes
+    layoutModelsTitle: 'أوضاع القائمة الجانبية (3 أوضاع):',
+    layoutClassic: '1. القائمة الكلاسيكية (Classic)',
+    layoutVerticalCards: '2. البطاقات الطولية (Vertical Cards)',
+    layoutCreative: '3. الوضع الإبداعي (Creative Mode)',
 
-    layoutDescHorizontal: 'توزيع أفقي منظم مع تثبيت الفلاتر بالقسم العلوي لتوفير أكبر مساحة عرض للمرفقات.',
-    layoutDescSidebar: 'واجهة بريد كلاسيكية مع قائمة جانبية قابلة للطي لصندوق الوارد والمجلدات.',
-    layoutDescGrid: 'بطاقات منظمة للمشاريع مع نافذة معاينة سريعة وسهولة انتقال بين الملفات.',
-    layoutDescTimeline: 'سجل زمني تسلسلي يعرض المرفقات والفحوصات مرتبة بالتاريخ مع مؤشرات الإنجاز.',
-    layoutDescCompact: 'عرض جدولي تنفيذي مكثف يسهل الفرز السريع والمراجعة الفنية لكافة الملفات.',
+    layoutDescClassic: 'الوضع الكلاسيكي المعتمد مع قائمة جانبية قابلة للطي لصناديق البريد والمجلدات.',
+    layoutDescVerticalCards: 'عرض عناصر القائمة في بطاقات طولية منفصلة ومنظمة تسهل التمييز والتنقل.',
+    layoutDescCreative: 'تصميم إبداعي أنيق ومريح يركز على البساطة وسهولة الوصول لجميع الأقسام.',
 
-    // Theme Colors
-    themeColorTitle: 'تخصيص لون الواجهة:',
-    themeBeige: 'البيج الرخامي الملكي (Beige)',
-    themeSilver: 'الألمنيوم والفضة الصناعية (Silver)',
-    themeBronze: 'البرونز والنحاس الحراري (Bronze)',
-    themeNavy: 'الأزرق البترولي المتقدم (Navy)',
-    themeEmerald: 'الزمردي الهندسي (Emerald)',
+    // 4 Comprehensive Themes
+    themeColorTitle: 'نظام الألوان والثيمات (4 ثيمات):',
+    themeWhite: '1. الأبيض المشرق (White Theme)',
+    themeCharcoalNavy: '2. الكحلي الفحمي (Charcoal Navy)',
+    themePetroleumGreen: '3. الأخضر البترولي (Petroleum Green)',
+    themeIsonilOriginal: '4. الهوية الأصلية ISONIL (Original Identity)',
+
+    // Icon Size Controls
+    iconSizeTitle: 'التحكم في حجم الأيقونات:',
+    iconSizeSmall: 'صغير (مدمج)',
+    iconSizeMedium: 'متوسط (الافتراضي)',
+    iconSizeLarge: 'كبير (واضح)',
 
     // Notification Center
     notificationsTitle: 'مركز الإشعارات الواردة',
@@ -304,27 +305,28 @@ export const translations = {
     workingHoursVal: 'Du Lundi au Vendredi : 08h30 à 18h00',
     headquartersAddressLabel: 'Siège et Bureau Technique',
 
-    // 5 Design Layout Models (Dropdown)
-    layoutModelsTitle: 'Modèles de structure et de mise en page (5 modèles) :',
-    layoutHorizontal: '1. Navigation Supérieure (Horizontal Stream)',
-    layoutSidebar: '2. Barre Latérale Classique (Classic Split)',
-    layoutGrid: '3. Grille Projets Interactive (Card Grid)',
-    layoutTimeline: '4. Dossier Chronologique des Événements (Timeline Dossier)',
-    layoutCompact: '5. Table Haute Densité (Compact Data Table)',
+    // 3 Sidebar / Layout Modes
+    layoutModelsTitle: 'Modes de la barre latérale (3 modes) :',
+    layoutClassic: '1. Barre Classique (Classic Split)',
+    layoutVerticalCards: '2. Cartes Verticales (Vertical Cards)',
+    layoutCreative: '3. Mode Créatif (Creative Mode)',
 
-    layoutDescHorizontal: 'Disposition épurée avec filtres supérieurs pour maximiser l espace d affichage des documents.',
-    layoutDescSidebar: 'Interface type messagerie professionnelle avec barre latérale pour les dossiers et archives.',
-    layoutDescGrid: 'Structure modulaire sous forme de cartes de projets avec aperçu interactif.',
-    layoutDescTimeline: 'Historique chronologique continu classé par date et rapport de chantier.',
-    layoutDescCompact: 'Tableau compact optimisé pour le tri rapide et le traitement intensif des fichiers.',
+    layoutDescClassic: 'Mode classique établi avec barre latérale repliable pour les dossiers et boîtes de réception.',
+    layoutDescVerticalCards: 'Affichage en cartes verticales indépendantes et aérées pour un accès direct.',
+    layoutDescCreative: 'Design créatif épuré et moderne privilégiant la simplicité et le confort visuel.',
 
-    // Theme Colors
-    themeColorTitle: 'Personnaliser le thème :',
-    themeBeige: 'Beige Marbre Impérial (Beige)',
-    themeSilver: 'Aluminium & Argent Métallique (Silver)',
-    themeBronze: 'Bronze & Cuivre Industriel (Bronze)',
-    themeNavy: 'Bleu Pétrole & Marine (Navy)',
-    themeEmerald: 'Émeraude Technique (Emerald)',
+    // 4 Comprehensive Themes
+    themeColorTitle: 'Palette des thèmes (4 thèmes) :',
+    themeWhite: '1. Blanc Lumineux (White Theme)',
+    themeCharcoalNavy: '2. Bleu Nuit Charbon (Charcoal Navy)',
+    themePetroleumGreen: '3. Vert Pétrole (Petroleum Green)',
+    themeIsonilOriginal: '4. Identité Originale ISONIL (Original Identity)',
+
+    // Icon Size Controls
+    iconSizeTitle: 'Taille des icônes :',
+    iconSizeSmall: 'Petite (Compacte)',
+    iconSizeMedium: 'Moyenne (Défaut)',
+    iconSizeLarge: 'Grande (Haute Visibilité)',
 
     // Notification Center
     notificationsTitle: 'Centre des Notifications',

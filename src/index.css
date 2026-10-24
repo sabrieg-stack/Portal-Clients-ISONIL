@@ -21,50 +21,213 @@
   }
 }
 
-/* 5 Theme color definitions aligned with official ISONIL palette */
-html[data-theme="beige"], :root {
+/* 4 Comprehensive Themes for ISONIL Portal */
+
+/* 1. White Theme — الأبيض */
+html[data-theme="white"] {
+  --bg-main: #FFFFFF;
+  --bg-surface: #F8FAFC;
+  --bg-subtle: #F1F5F9;
+  --bg-hover: #E2E8F0;
+  --text-main: #172B3A;
+  --text-muted: #475569;
+  --text-headings: #0F172A;
+  --border-color: #E2E8F0;
+  --border-subtle: #EDF2F7;
+  --theme-accent: #DFC57B;
+  --theme-accent-hover: #C9AF66;
+  --theme-accent-glow: rgba(223, 197, 123, 0.25);
+  --theme-accent-border: #CBD5E1;
+  --theme-text-contrast: #172B3A;
+}
+
+/* 2. Charcoal Navy — الكحلي الفحمي */
+html[data-theme="charcoal-navy"] {
+  --bg-main: #26313A;
+  --bg-surface: #1E272E;
+  --bg-subtle: #192026;
+  --bg-hover: #323F49;
+  --text-main: #FFFFFF;
+  --text-muted: #94A3B8;
+  --text-headings: #DFC57B;
+  --border-color: rgba(121, 200, 232, 0.25);
+  --border-subtle: rgba(121, 200, 232, 0.15);
   --theme-accent: #DFC57B;
   --theme-accent-hover: #d4b663;
-  --theme-accent-light: #f5efe8;
   --theme-accent-glow: rgba(223, 197, 123, 0.22);
-  --theme-accent-border: rgba(223, 197, 123, 0.45);
+  --theme-accent-border: rgba(121, 200, 232, 0.35);
   --theme-text-contrast: #0B192C;
 }
 
-html[data-theme="silver"] {
-  --theme-accent: #A9DDF1;
-  --theme-accent-hover: #79C8E8;
-  --theme-accent-light: #f8fafc;
-  --theme-accent-glow: rgba(169, 221, 241, 0.22);
-  --theme-accent-border: rgba(169, 221, 241, 0.45);
-  --theme-text-contrast: #0B192C;
+/* 3. Petroleum Green — الأخضر البترولي */
+html[data-theme="petroleum-green"] {
+  --bg-main: #14564F;
+  --bg-surface: #0E433D;
+  --bg-subtle: #09322D;
+  --bg-hover: #1A6961;
+  --text-main: #FFFFFF;
+  --text-muted: #CBD5E1;
+  --text-headings: #DFC57B;
+  --border-color: rgba(184, 224, 216, 0.28);
+  --border-subtle: rgba(184, 224, 216, 0.18);
+  --theme-accent: #B8E0D8;
+  --theme-accent-hover: #9FD3C7;
+  --theme-accent-glow: rgba(184, 224, 216, 0.25);
+  --theme-accent-border: rgba(184, 224, 216, 0.38);
+  --theme-text-contrast: #0E433D;
 }
 
-html[data-theme="bronze"] {
-  --theme-accent: #f59e0b;
-  --theme-accent-hover: #d97706;
-  --theme-accent-light: #fef3c7;
-  --theme-accent-glow: rgba(245, 158, 11, 0.25);
-  --theme-accent-border: rgba(245, 158, 11, 0.45);
-  --theme-text-contrast: #0B192C;
-}
-
-html[data-theme="navy"] {
-  --theme-accent: #79C8E8;
-  --theme-accent-hover: #38bdf8;
-  --theme-accent-light: #e0f2fe;
-  --theme-accent-glow: rgba(121, 200, 232, 0.25);
+/* 4. ISONIL Original — الهوية الأصلية */
+html[data-theme="isonil-original"], :root {
+  --bg-main: #0B192C;
+  --bg-surface: #112239;
+  --bg-subtle: #071220;
+  --bg-hover: #162942;
+  --text-main: #FFFFFF;
+  --text-muted: #94A3B8;
+  --text-headings: #DFC57B;
+  --border-color: rgba(121, 200, 232, 0.25);
+  --border-subtle: rgba(121, 200, 232, 0.15);
+  --theme-accent: #DFC57B;
+  --theme-accent-hover: #d4b663;
+  --theme-accent-glow: rgba(223, 197, 123, 0.22);
   --theme-accent-border: rgba(121, 200, 232, 0.45);
   --theme-text-contrast: #0B192C;
 }
 
-html[data-theme="emerald"] {
-  --theme-accent: #10b981;
-  --theme-accent-hover: #059669;
-  --theme-accent-light: #d1fae5;
-  --theme-accent-glow: rgba(16, 185, 129, 0.25);
-  --theme-accent-border: rgba(16, 185, 129, 0.45);
-  --theme-text-contrast: #ffffff;
+/* Icon Size Scaling Rules */
+html[data-icon-size="small"] {
+  --icon-scale: 0.85;
+}
+html[data-icon-size="medium"], :root {
+  --icon-scale: 1;
+}
+html[data-icon-size="large"] {
+  --icon-scale: 1.25;
+}
+
+/* Universal icon scale for Lucide SVG icons across header, sidebars, buttons */
+svg.lucide:not(.brand-logo),
+.scalable-icon,
+button > svg:not(.brand-logo),
+nav svg,
+aside svg,
+header svg:not(.brand-logo) {
+  transform: scale(var(--icon-scale, 1));
+  transform-origin: center;
+  transition: transform 0.15s ease-in-out;
+}
+
+/* White Theme Component Mappings */
+html[data-theme="white"] body {
+  background-color: #FFFFFF !important;
+  color: #172B3A !important;
+}
+html[data-theme="white"] .bg-\[\#0B192C\] {
+  background-color: var(--bg-subtle) !important;
+  color: #172B3A !important;
+}
+html[data-theme="white"] .bg-\[\#112239\] {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-color) !important;
+  color: #172B3A !important;
+}
+html[data-theme="white"] .bg-\[\#0B192C\]\/95,
+html[data-theme="white"] .bg-\[\#0B192C\]\/90 {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  color: #172B3A !important;
+}
+html[data-theme="white"] header {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-color: var(--border-color) !important;
+  color: #172B3A !important;
+}
+html[data-theme="white"] footer {
+  background-color: #F8FAFC !important;
+  border-color: var(--border-color) !important;
+  color: #475569 !important;
+}
+html[data-theme="white"] .text-white {
+  color: #172B3A !important;
+}
+html[data-theme="white"] .text-slate-200,
+html[data-theme="white"] .text-slate-300 {
+  color: #334155 !important;
+}
+html[data-theme="white"] .text-slate-400 {
+  color: #64748B !important;
+}
+html[data-theme="white"] .text-\[\#A9DDF1\] {
+  color: #0369A1 !important;
+}
+html[data-theme="white"] .border-\[\#79C8E8\]\/25,
+html[data-theme="white"] .border-\[\#79C8E8\]\/20,
+html[data-theme="white"] .border-\[\#79C8E8\]\/30,
+html[data-theme="white"] .border-\[\#79C8E8\]\/15 {
+  border-color: var(--border-color) !important;
+}
+html[data-theme="white"] .hover\:bg-\[\#162942\]:hover,
+html[data-theme="white"] .hover\:bg-\[\#162942\]\/80:hover {
+  background-color: var(--bg-hover) !important;
+}
+html[data-theme="white"] input,
+html[data-theme="white"] select,
+html[data-theme="white"] textarea {
+  background-color: #F1F5F9 !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
+}
+
+/* Charcoal Navy Mappings */
+html[data-theme="charcoal-navy"] body {
+  background-color: #26313A !important;
+}
+html[data-theme="charcoal-navy"] .bg-\[\#0B192C\] {
+  background-color: var(--bg-subtle) !important;
+}
+html[data-theme="charcoal-navy"] .bg-\[\#112239\] {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-color) !important;
+}
+html[data-theme="charcoal-navy"] .bg-\[\#0B192C\]\/95,
+html[data-theme="charcoal-navy"] .bg-\[\#0B192C\]\/90 {
+  background-color: rgba(38, 49, 58, 0.96) !important;
+}
+html[data-theme="charcoal-navy"] header {
+  background-color: rgba(38, 49, 58, 0.96) !important;
+}
+html[data-theme="charcoal-navy"] footer {
+  background-color: #1E272E !important;
+}
+html[data-theme="charcoal-navy"] .hover\:bg-\[\#162942\]:hover,
+html[data-theme="charcoal-navy"] .hover\:bg-\[\#162942\]\/80:hover {
+  background-color: var(--bg-hover) !important;
+}
+
+/* Petroleum Green Mappings */
+html[data-theme="petroleum-green"] body {
+  background-color: #14564F !important;
+}
+html[data-theme="petroleum-green"] .bg-\[\#0B192C\] {
+  background-color: var(--bg-subtle) !important;
+}
+html[data-theme="petroleum-green"] .bg-\[\#112239\] {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border-color) !important;
+}
+html[data-theme="petroleum-green"] .bg-\[\#0B192C\]\/95,
+html[data-theme="petroleum-green"] .bg-\[\#0B192C\]\/90 {
+  background-color: rgba(20, 86, 79, 0.96) !important;
+}
+html[data-theme="petroleum-green"] header {
+  background-color: rgba(20, 86, 79, 0.96) !important;
+}
+html[data-theme="petroleum-green"] footer {
+  background-color: #0E433D !important;
+}
+html[data-theme="petroleum-green"] .hover\:bg-\[\#162942\]:hover,
+html[data-theme="petroleum-green"] .hover\:bg-\[\#162942\]\/80:hover {
+  background-color: var(--bg-hover) !important;
 }
 
 /* Dynamic theme helper classes */

@@ -21,7 +21,7 @@ import {
   FolderKanban,
   Check
 } from 'lucide-react';
-import { Language, User, LayoutModel, ThemeColor, NotificationItem } from '../types';
+import { Language, User, LayoutModel, ThemeColor, IconSize, NotificationItem } from '../types';
 import { translations } from '../i18n/translations';
 import { NotificationCenter } from './NotificationCenter';
 
@@ -42,6 +42,8 @@ interface HeaderProps {
   onLayoutChange: (model: LayoutModel) => void;
   themeColor: ThemeColor;
   onThemeChange: (theme: ThemeColor) => void;
+  iconSize?: IconSize;
+  onIconSizeChange?: (size: IconSize) => void;
   notifications: NotificationItem[];
   onMarkAllNotificationsRead: () => void;
   onSelectNotification: (notif: NotificationItem) => void;
@@ -63,6 +65,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLayoutChange,
   themeColor,
   onThemeChange,
+  iconSize = 'medium',
+  onIconSizeChange,
   notifications,
   onMarkAllNotificationsRead,
   onSelectNotification,
@@ -97,12 +101,11 @@ export const Header: React.FC<HeaderProps> = ({
   const phoneCallUrl = "tel:+212710738409";
   const emailMailtoUrl = "mailto:contact@isonil.com?subject=Demande%20Portail%20Clients%20ISONIL";
 
-  const themeOptions: { id: ThemeColor; label: string; color: string }[] = [
-    { id: 'beige', label: t.themeBeige, color: '#DFC57B' },
-    { id: 'silver', label: t.themeSilver, color: '#A9DDF1' },
-    { id: 'bronze', label: t.themeBronze, color: '#f59e0b' },
-    { id: 'navy', label: t.themeNavy, color: '#79C8E8' },
-    { id: 'emerald', label: t.themeEmerald, color: '#10b981' },
+  const themeOptions: { id: ThemeColor; label: string; color: string; border?: string }[] = [
+    { id: 'white', label: t.themeWhite, color: '#FFFFFF', border: '#CBD5E1' },
+    { id: 'charcoal-navy', label: t.themeCharcoalNavy, color: '#26313A' },
+    { id: 'petroleum-green', label: t.themePetroleumGreen, color: '#14564F' },
+    { id: 'isonil-original', label: t.themeIsonilOriginal, color: '#0B192C' },
   ];
 
   const activeThemeObj = themeOptions.find((o) => o.id === themeColor) || themeOptions[0];
@@ -217,22 +220,56 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right / Unified Toolbar: All items balanced at h-9 (36px) */}
         <div className="flex flex-wrap items-center justify-end gap-2 ms-auto">
           
-          {/* Single Layout Model Selector */}
+          {/* Single Layout Model Selector (3 modes) */}
           {showLayoutSelector && (
             <div className="h-9 flex items-center gap-1.5 bg-[#112239] px-3 rounded-xl border border-[#79C8E8]/25" title={t.layoutModelsTitle}>
               <Sparkles className="w-3.5 h-3.5 theme-text shrink-0" />
               <select
                 value={layoutModel}
                 onChange={(e) => onLayoutChange(e.target.value as LayoutModel)}
-                className="bg-transparent theme-text text-xs font-bold focus:outline-none cursor-pointer max-w-[155px] sm:max-w-[185px] truncate"
+                className="bg-transparent theme-text text-xs font-bold focus:outline-none cursor-pointer max-w-[155px] sm:max-w-[195px] truncate"
                 title={t.layoutModelsTitle}
               >
-                <option value="horizontal" className="bg-[#112239] text-white">{t.layoutHorizontal}</option>
-                <option value="sidebar" className="bg-[#112239] text-white">{t.layoutSidebar}</option>
-                <option value="grid" className="bg-[#112239] text-white">{t.layoutGrid}</option>
-                <option value="timeline" className="bg-[#112239] text-white">{t.layoutTimeline}</option>
-                <option value="compact" className="bg-[#112239] text-white">{t.layoutCompact}</option>
+                <option value="classic" className="bg-[#112239] text-white">{t.layoutClassic}</option>
+                <option value="vertical-cards" className="bg-[#112239] text-white">{t.layoutVerticalCards}</option>
+                <option value="creative" className="bg-[#112239] text-white">{t.layoutCreative}</option>
               </select>
+            </div>
+          )}
+
+          {/* Icon Size Control (Small, Medium, Large) */}
+          {onIconSizeChange && (
+            <div className="h-9 flex items-center gap-1 bg-[#112239] px-2 rounded-xl border border-[#79C8E8]/25" title={t.iconSizeTitle}>
+              <span className="text-[10px] text-slate-300 font-bold px-1 hidden sm:inline">{lang === 'ar' ? 'الأيقونات:' : 'Icônes:'}</span>
+              {(['small', 'medium', 'large'] as IconSize[]).map((size) => {
+                const isActive = iconSize === size;
+                const sizeLabels = {
+                  small: lang === 'ar' ? 'ص' : 'S',
+                  medium: lang === 'ar' ? 'م' : 'M',
+                  large: lang === 'ar' ? 'ك' : 'L',
+                };
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => onIconSizeChange(size)}
+                    className={`h-7 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#DFC57B] text-[#0B192C] shadow-sm font-black'
+                        : 'text-slate-300 hover:text-white hover:bg-[#162942]'
+                    }`}
+                    title={
+                      size === 'small'
+                        ? t.iconSizeSmall
+                        : size === 'medium'
+                        ? t.iconSizeMedium
+                        : t.iconSizeLarge
+                    }
+                  >
+                    {sizeLabels[size]}
+                  </button>
+                );
+              })}
             </div>
           )}
 
