@@ -19,7 +19,8 @@ import {
   Headphones,
   LayoutGrid,
   FolderKanban,
-  Check
+  Check,
+  SlidersHorizontal
 } from 'lucide-react';
 import { Language, User, LayoutModel, ThemeColor, IconSize, NotificationItem } from '../types';
 import { translations } from '../i18n/translations';
@@ -75,26 +76,26 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Dropdown states
   const [showContactMenu, setShowContactMenu] = useState(false);
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const contactMenuRef = useRef<HTMLDivElement>(null);
-  const themeMenuRef = useRef<HTMLDivElement>(null);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (contactMenuRef.current && !contactMenuRef.current.contains(event.target as Node)) {
         setShowContactMenu(false);
       }
-      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
-        setShowThemeMenu(false);
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(event.target as Node)) {
+        setShowSettingsMenu(false);
       }
     }
-    if (showContactMenu || showThemeMenu) {
+    if (showContactMenu || showSettingsMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showContactMenu, showThemeMenu]);
+  }, [showContactMenu, showSettingsMenu]);
 
   const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("Centre Andalousie El Jadida Maroc")}`;
   const whatsappUrl = "https://wa.me/212710738409";
@@ -159,27 +160,13 @@ export const Header: React.FC<HeaderProps> = ({
     );
   }
 
-  const showLayoutSelector = currentUser.role !== 'admin' || activeAdminSubView === 'workspace';
-
-  // Authenticated Portal Header: Visually balanced single top bar with uniform 36px (h-9) controls
+  // Authenticated Portal Header: Unified, clean single top bar with fixed element ordering
   return (
     <header className="sticky top-0 z-40 bg-[#0B192C]/95 backdrop-blur-md border-b border-[#79C8E8]/20 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 md:px-6 min-h-[64px] py-2 flex flex-wrap lg:flex-nowrap items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-3">
         
-        {/* Left: Back Button + Logo Only + Admin View Switcher */}
-        <div className="flex items-center gap-3 min-w-0">
-          {canGoBack && onBack && (
-            <button
-              onClick={onBack}
-              className="h-9 flex items-center gap-1.5 px-3 rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 hover:text-white border border-[#79C8E8]/25 transition-colors text-xs font-semibold cursor-pointer shrink-0"
-              title={t.back}
-            >
-              {lang === 'ar' ? <ArrowRight className="w-3.5 h-3.5 theme-text" /> : <ArrowLeft className="w-3.5 h-3.5 theme-text" />}
-              <span className="hidden xl:inline">{t.back}</span>
-            </button>
-          )}
-
-          {/* Brand Logo Only (Text removed as requested) */}
+        {/* Left / Start: Brand Logo & Admin Sub-View Switcher (Fixed Position) */}
+        <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center shrink-0">
             <img 
               src="/logo.png" 
@@ -188,10 +175,11 @@ export const Header: React.FC<HeaderProps> = ({
             />
           </div>
 
-          {/* Admin Sub-View Switcher Integrated into the Single Header */}
+          {/* Admin Sub-View Switcher: Consistent across all admin screens on desktop */}
           {currentUser.role === 'admin' && onAdminSubViewChange && (
-            <div className="h-9 flex items-center gap-1 bg-[#112239] p-1 rounded-xl border border-[#79C8E8]/25 ms-1">
+            <div className="h-9 hidden sm:flex items-center gap-1 bg-[#112239] p-1 rounded-xl border border-[#79C8E8]/25">
               <button
+                type="button"
                 onClick={() => onAdminSubViewChange('dashboard')}
                 className={`h-7 flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeAdminSubView === 'dashboard'
@@ -203,6 +191,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>{lang === 'ar' ? 'لوحة القيادة' : 'Tableau de bord'}</span>
               </button>
               <button
+                type="button"
                 onClick={() => onAdminSubViewChange('workspace')}
                 className={`h-7 flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   activeAdminSubView === 'workspace'
@@ -217,138 +206,170 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </div>
 
-        {/* Right / Unified Toolbar: All items balanced at h-9 (36px) */}
-        <div className="flex flex-wrap items-center justify-end gap-2 ms-auto">
+        {/* Right / End: Fixed Order Toolbar across ALL portal pages */}
+        <div className="flex items-center justify-end gap-2 shrink-0">
           
-          {/* Single Layout Model Selector (3 modes) */}
-          {showLayoutSelector && (
-            <div className="h-9 flex items-center gap-1.5 bg-[#112239] px-3 rounded-xl border border-[#79C8E8]/25" title={t.layoutModelsTitle}>
-              <Sparkles className="w-3.5 h-3.5 theme-text shrink-0" />
-              <select
-                value={layoutModel}
-                onChange={(e) => onLayoutChange(e.target.value as LayoutModel)}
-                className="bg-transparent theme-text text-xs font-bold focus:outline-none cursor-pointer max-w-[155px] sm:max-w-[195px] truncate"
-                title={t.layoutModelsTitle}
-              >
-                <option value="classic" className="bg-[#112239] text-white">{t.layoutClassic}</option>
-                <option value="vertical-cards" className="bg-[#112239] text-white">{t.layoutVerticalCards}</option>
-                <option value="creative" className="bg-[#112239] text-white">{t.layoutCreative}</option>
-              </select>
-            </div>
-          )}
-
-          {/* Icon Size Control (Small, Medium, Large) */}
-          {onIconSizeChange && (
-            <div className="h-9 flex items-center gap-1 bg-[#112239] px-2 rounded-xl border border-[#79C8E8]/25" title={t.iconSizeTitle}>
-              <span className="text-[10px] text-slate-300 font-bold px-1 hidden sm:inline">{lang === 'ar' ? 'الأيقونات:' : 'Icônes:'}</span>
-              {(['small', 'medium', 'large'] as IconSize[]).map((size) => {
-                const isActive = iconSize === size;
-                const sizeLabels = {
-                  small: lang === 'ar' ? 'ص' : 'S',
-                  medium: lang === 'ar' ? 'م' : 'M',
-                  large: lang === 'ar' ? 'ك' : 'L',
-                };
-                return (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => onIconSizeChange(size)}
-                    className={`h-7 px-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                      isActive
-                        ? 'bg-[#DFC57B] text-[#0B192C] shadow-sm font-black'
-                        : 'text-slate-300 hover:text-white hover:bg-[#162942]'
-                    }`}
-                    title={
-                      size === 'small'
-                        ? t.iconSizeSmall
-                        : size === 'medium'
-                        ? t.iconSizeMedium
-                        : t.iconSizeLarge
-                    }
-                  >
-                    {sizeLabels[size]}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Theme Color Dropdown Menu (قائمة منسدلة للألوان بدلاً من المصفوفة) */}
-          <div className="relative" ref={themeMenuRef}>
+          {/* 1. UI Settings Dropdown (Layout, Themes, Icon Sizes in one clean popover) */}
+          <div className="relative" ref={settingsMenuRef}>
             <button
               type="button"
-              onClick={() => setShowThemeMenu(!showThemeMenu)}
-              className="h-9 flex items-center gap-2 px-3 rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 border border-[#79C8E8]/25 transition-all text-xs font-semibold cursor-pointer"
-              title={t.themeColorTitle}
+              onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+              className="h-9 flex items-center gap-2 px-2.5 sm:px-3 rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 border border-[#79C8E8]/25 transition-all text-xs font-semibold cursor-pointer shrink-0"
+              title={t.uiSettingsTitle}
+              aria-label={t.uiSettingsTitle}
             >
-              <Palette className="w-3.5 h-3.5 theme-text shrink-0" />
+              <SlidersHorizontal className="w-3.5 h-3.5 theme-text shrink-0" />
               <span
-                className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/40"
+                className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/40 shadow-xs"
                 style={{ backgroundColor: activeThemeObj.color }}
               />
-              <span className="hidden md:inline max-w-[95px] truncate">{activeThemeObj.label}</span>
-              {showThemeMenu ? (
-                <ChevronUp className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="hidden lg:inline text-xs font-semibold text-slate-200">
+                {t.uiSettingsTitle}
+              </span>
+              {showSettingsMenu ? (
+                <ChevronUp className="w-3 h-3 text-slate-400 shrink-0" />
               ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
               )}
             </button>
 
-            {showThemeMenu && (
+            {showSettingsMenu && (
               <div
-                className={`absolute top-full mt-2 w-48 bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-1.5 shadow-2xl z-50 backdrop-blur-xl ${
+                className={`absolute top-full mt-2 w-72 sm:w-80 bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-3.5 shadow-2xl z-50 backdrop-blur-xl ${
                   lang === 'ar' ? 'left-0' : 'right-0'
                 }`}
               >
-                <div className="px-2.5 py-1.5 text-[10px] font-bold text-[#A9DDF1] uppercase tracking-wider border-b border-[#79C8E8]/15 mb-1">
-                  {t.themeColorTitle}
+                {/* Popover Header */}
+                <div className="pb-2.5 mb-3 border-b border-[#79C8E8]/20 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 theme-text" />
+                    <h4 className="font-bold text-white text-xs uppercase tracking-wider">
+                      {t.uiSettingsTitle}
+                    </h4>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {activeThemeObj.label}
+                  </span>
                 </div>
-                {themeOptions.map((opt) => {
-                  const isSelected = themeColor === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        onThemeChange(opt.id);
-                        setShowThemeMenu(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#0B192C] text-white font-bold'
-                          : 'text-slate-300 hover:bg-[#162942] hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2.5 truncate">
-                        <span
-                          className="w-3 h-3 rounded-full shrink-0 border border-white/30"
-                          style={{ backgroundColor: opt.color }}
-                        />
-                        <span className="truncate">{opt.label}</span>
+
+                {/* Section A: Theme Selection (4 Themes) */}
+                <div className="mb-3.5">
+                  <div className="flex items-center gap-1.5 mb-2 text-[11px] font-bold text-slate-300">
+                    <Palette className="w-3.5 h-3.5 theme-text" />
+                    <span>{t.themeSectionTitle}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {themeOptions.map((opt) => {
+                      const isSelected = themeColor === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => onThemeChange(opt.id)}
+                          className={`flex items-center justify-between p-2 rounded-xl text-[11px] font-semibold border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#0B192C] text-white border-[#DFC57B] shadow-sm ring-1 ring-[#DFC57B]/40'
+                              : 'bg-[#0B192C]/50 text-slate-300 border-[#79C8E8]/15 hover:bg-[#162942] hover:text-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0 border border-white/40"
+                              style={{ backgroundColor: opt.color }}
+                            />
+                            <span className="truncate">{opt.label}</span>
+                          </div>
+                          {isSelected && <Check className="w-3 h-3 theme-text shrink-0 ms-1" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section B: Sidebar / Layout Modes (3 Modes) */}
+                <div className="mb-3.5 pt-3 border-t border-[#79C8E8]/15">
+                  <div className="flex items-center gap-1.5 mb-2 text-[11px] font-bold text-slate-300">
+                    <LayoutGrid className="w-3.5 h-3.5 theme-text" />
+                    <span>{t.layoutSectionTitle}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: 'classic', label: t.layoutClassic },
+                      { id: 'vertical-cards', label: t.layoutVerticalCards },
+                      { id: 'creative', label: t.layoutCreative },
+                    ].map((item) => {
+                      const isSelected = layoutModel === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => onLayoutChange(item.id as LayoutModel)}
+                          className={`py-1.5 px-2 rounded-xl text-[11px] font-bold text-center truncate border transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#DFC57B] text-[#0B192C] border-[#DFC57B] shadow-sm'
+                              : 'bg-[#0B192C] text-slate-300 border-[#79C8E8]/15 hover:bg-[#162942] hover:text-white'
+                          }`}
+                          title={item.label}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section C: Icon Size Selection (3 Levels) */}
+                {onIconSizeChange && (
+                  <div className="pt-3 border-t border-[#79C8E8]/15">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300">
+                        <Sparkles className="w-3.5 h-3.5 theme-text" />
+                        <span>{t.iconSizeSectionTitle}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {iconSize === 'small' ? t.iconSizeSmall : iconSize === 'large' ? t.iconSizeLarge : t.iconSizeMedium}
                       </span>
-                      {isSelected && <Check className="w-3.5 h-3.5 theme-text shrink-0" />}
-                    </button>
-                  );
-                })}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: 'small', label: t.iconSizeSmall, short: lang === 'ar' ? 'صغير' : 'Petite' },
+                        { id: 'medium', label: t.iconSizeMedium, short: lang === 'ar' ? 'متوسط' : 'Moyenne' },
+                        { id: 'large', label: t.iconSizeLarge, short: lang === 'ar' ? 'كبير' : 'Grande' },
+                      ].map((size) => {
+                        const isSelected = iconSize === size.id;
+                        return (
+                          <button
+                            key={size.id}
+                            type="button"
+                            onClick={() => onIconSizeChange(size.id as IconSize)}
+                            className={`py-1.5 px-2 rounded-xl text-[11px] font-bold text-center border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#DFC57B] text-[#0B192C] border-[#DFC57B] shadow-sm'
+                                : 'bg-[#0B192C] text-slate-300 border-[#79C8E8]/15 hover:bg-[#162942] hover:text-white'
+                            }`}
+                            title={size.label}
+                          >
+                            {size.short}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Unified Contact Dropdown */}
+          {/* 2. Contact Details: Icon-only per User Request Point 5 */}
           <div className="relative" ref={contactMenuRef}>
             <button
               type="button"
               onClick={() => setShowContactMenu(!showContactMenu)}
-              className="h-9 flex items-center gap-1.5 px-3 rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 border border-[#79C8E8]/25 transition-all font-semibold text-xs cursor-pointer"
+              className="h-9 w-9 flex items-center justify-center rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 border border-[#79C8E8]/25 transition-all cursor-pointer shrink-0"
               title={t.contactDetailsTitle}
+              aria-label={t.contactDetailsTitle}
             >
-              <Headphones className="w-3.5 h-3.5 theme-text shrink-0" />
-              <span className="hidden xl:inline">{t.contactDetailsMenu}</span>
-              {showContactMenu ? (
-                <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-              )}
+              <Headphones className="w-4 h-4 theme-text" />
             </button>
 
             {showContactMenu && (
@@ -447,18 +468,19 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Language Switcher */}
+          {/* 3. Language Switcher */}
           <button
             type="button"
             onClick={() => onLanguageChange(lang === 'ar' ? 'fr' : 'ar')}
-            className="h-9 flex items-center gap-1.5 px-3 rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 border border-[#79C8E8]/25 transition-all font-semibold text-xs cursor-pointer"
+            className="h-9 flex items-center gap-1.5 px-2.5 rounded-xl bg-[#112239] hover:bg-[#162942] text-slate-200 border border-[#79C8E8]/25 transition-all font-semibold text-xs cursor-pointer shrink-0"
             title={t.switchLanguage}
+            aria-label={t.switchLanguage}
           >
             <Globe className="w-3.5 h-3.5 theme-text" />
             <span>{lang === 'ar' ? 'FR' : 'عربي'}</span>
           </button>
 
-          {/* Notifications Center */}
+          {/* 4. Notifications Center */}
           <NotificationCenter
             lang={lang}
             notifications={notifications}
@@ -466,8 +488,8 @@ export const Header: React.FC<HeaderProps> = ({
             onSelectNotification={onSelectNotification}
           />
 
-          {/* User Profile Capsule */}
-          <div className="h-9 flex items-center gap-2 px-2.5 rounded-xl bg-[#112239] border border-[#79C8E8]/25">
+          {/* 5. User Profile Capsule */}
+          <div className="h-9 flex items-center gap-2 px-2.5 rounded-xl bg-[#112239] border border-[#79C8E8]/25 shrink-0">
             <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${
               currentUser.role === 'admin' 
                 ? 'theme-bg-subtle theme-text theme-border border' 
@@ -476,28 +498,60 @@ export const Header: React.FC<HeaderProps> = ({
               {currentUser.role === 'admin' ? <Shield className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}
             </div>
             <div className="hidden md:flex flex-col text-start justify-center">
-              <span className="text-[11px] font-semibold text-white max-w-[115px] truncate leading-none mb-0.5">
+              <span className="text-[11px] font-semibold text-white max-w-[110px] truncate leading-none mb-0.5">
                 {currentUser.companyName}
               </span>
-              <span className="text-[10px] theme-text truncate max-w-[115px] leading-none">
+              <span className="text-[10px] theme-text truncate max-w-[110px] leading-none">
                 {currentUser.fullName}
               </span>
             </div>
           </div>
 
-          {/* Logout Button */}
+          {/* 6. Logout Button: Icon-only per User Request Point 5 */}
           <button
             type="button"
             onClick={onLogout}
-            className="h-9 flex items-center gap-1.5 px-3 rounded-xl bg-[#112239] hover:bg-[#E50914]/20 text-slate-200 hover:text-white border border-[#79C8E8]/25 hover:border-[#E50914]/40 transition-colors text-xs font-semibold cursor-pointer"
+            className="h-9 w-9 flex items-center justify-center rounded-xl bg-[#112239] hover:bg-[#E50914]/20 text-slate-200 hover:text-white border border-[#79C8E8]/25 hover:border-[#E50914]/40 transition-colors cursor-pointer shrink-0"
             title={t.logout}
+            aria-label={t.logout}
           >
-            <LogOut className={`w-3.5 h-3.5 text-slate-300 ${lang === 'ar' ? 'rotate-180' : ''}`} />
-            <span className="hidden xl:inline">{t.logout}</span>
+            <LogOut className={`w-4 h-4 text-slate-300 ${lang === 'ar' ? 'rotate-180' : ''}`} />
           </button>
 
         </div>
       </div>
+
+      {/* Mobile-only Admin Switcher Bar (Structured 2-row discipline on mobile) */}
+      {currentUser.role === 'admin' && onAdminSubViewChange && (
+        <div className="sm:hidden px-4 pb-2 pt-0.5 flex items-center justify-center border-t border-[#79C8E8]/10 bg-[#0B192C]">
+          <div className="h-8.5 w-full flex items-center justify-center gap-1 bg-[#112239] p-1 rounded-xl border border-[#79C8E8]/25">
+            <button
+              type="button"
+              onClick={() => onAdminSubViewChange('dashboard')}
+              className={`flex-1 h-7 flex items-center justify-center gap-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                activeAdminSubView === 'dashboard'
+                  ? 'theme-btn font-bold shadow-sm'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>{lang === 'ar' ? 'لوحة القيادة' : 'Tableau de bord'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAdminSubViewChange('workspace')}
+              className={`flex-1 h-7 flex items-center justify-center gap-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                activeAdminSubView === 'workspace'
+                  ? 'theme-btn font-bold shadow-sm'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              <FolderKanban className="w-3.5 h-3.5" />
+              <span>{lang === 'ar' ? 'المرفقات' : 'Fichiers'}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

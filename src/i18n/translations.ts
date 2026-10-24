@@ -21,27 +21,31 @@ export const translations = {
     headquartersAddressLabel: 'المقر والمكتب الهندسي',
 
     // 3 Sidebar / Layout Modes
-    layoutModelsTitle: 'أوضاع القائمة الجانبية (3 أوضاع):',
-    layoutClassic: '1. القائمة الكلاسيكية (Classic)',
-    layoutVerticalCards: '2. البطاقات الطولية (Vertical Cards)',
-    layoutCreative: '3. الوضع الإبداعي (Creative Mode)',
+    uiSettingsTitle: 'تخصيص الواجهة',
+    layoutSectionTitle: 'وضع القائمة',
+    themeSectionTitle: 'ثيم الألوان',
+    iconSizeSectionTitle: 'حجم الأيقونات',
+    layoutModelsTitle: 'أوضاع القائمة',
+    layoutClassic: 'كلاسيكي (Classic)',
+    layoutVerticalCards: 'بطاقات طولية (Cards)',
+    layoutCreative: 'إبداعي (Creative)',
 
     layoutDescClassic: 'الوضع الكلاسيكي المعتمد مع قائمة جانبية قابلة للطي لصناديق البريد والمجلدات.',
     layoutDescVerticalCards: 'عرض عناصر القائمة في بطاقات طولية منفصلة ومنظمة تسهل التمييز والتنقل.',
     layoutDescCreative: 'تصميم إبداعي أنيق ومريح يركز على البساطة وسهولة الوصول لجميع الأقسام.',
 
     // 4 Comprehensive Themes
-    themeColorTitle: 'نظام الألوان والثيمات (4 ثيمات):',
-    themeWhite: '1. الأبيض المشرق (White Theme)',
-    themeCharcoalNavy: '2. الكحلي الفحمي (Charcoal Navy)',
-    themePetroleumGreen: '3. الأخضر البترولي (Petroleum Green)',
-    themeIsonilOriginal: '4. الهوية الأصلية ISONIL (Original Identity)',
+    themeColorTitle: 'نظام الألوان',
+    themeWhite: 'الأبيض (White)',
+    themeCharcoalNavy: 'الكحلي الفحمي (Charcoal)',
+    themePetroleumGreen: 'الأخضر البترولي (Petroleum)',
+    themeIsonilOriginal: 'الهوية الأصلية (ISONIL)',
 
     // Icon Size Controls
-    iconSizeTitle: 'التحكم في حجم الأيقونات:',
-    iconSizeSmall: 'صغير (مدمج)',
-    iconSizeMedium: 'متوسط (الافتراضي)',
-    iconSizeLarge: 'كبير (واضح)',
+    iconSizeTitle: 'حجم الأيقونات',
+    iconSizeSmall: 'صغير',
+    iconSizeMedium: 'متوسط',
+    iconSizeLarge: 'كبير',
 
     // Notification Center
     notificationsTitle: 'مركز الإشعارات الواردة',
@@ -116,9 +120,9 @@ export const translations = {
 
     // Attachment Categories
     categoryAll: 'الكل',
-    categoryPhoto: 'صور فوتوغرافية',
-    categoryVideo: 'تسجيلات مرئية',
-    categoryDocument: 'وثائق ومستندات',
+    categoryPhoto: 'صور',
+    categoryVideo: 'فيديوهات',
+    categoryDocument: 'مستندات',
     categoryNote: 'ملاحظات وتقارير',
     categoryOther: 'ملفات أخرى',
 
@@ -306,27 +310,31 @@ export const translations = {
     headquartersAddressLabel: 'Siège et Bureau Technique',
 
     // 3 Sidebar / Layout Modes
-    layoutModelsTitle: 'Modes de la barre latérale (3 modes) :',
-    layoutClassic: '1. Barre Classique (Classic Split)',
-    layoutVerticalCards: '2. Cartes Verticales (Vertical Cards)',
-    layoutCreative: '3. Mode Créatif (Creative Mode)',
+    uiSettingsTitle: 'Personnalisation',
+    layoutSectionTitle: 'Disposition',
+    themeSectionTitle: 'Thème',
+    iconSizeSectionTitle: 'Taille des icônes',
+    layoutModelsTitle: 'Modes de la barre',
+    layoutClassic: 'Classique (Classic)',
+    layoutVerticalCards: 'Cartes Verticales (Cards)',
+    layoutCreative: 'Créatif (Creative)',
 
     layoutDescClassic: 'Mode classique établi avec barre latérale repliable pour les dossiers et boîtes de réception.',
     layoutDescVerticalCards: 'Affichage en cartes verticales indépendantes et aérées pour un accès direct.',
     layoutDescCreative: 'Design créatif épuré et moderne privilégiant la simplicité et le confort visuel.',
 
     // 4 Comprehensive Themes
-    themeColorTitle: 'Palette des thèmes (4 thèmes) :',
-    themeWhite: '1. Blanc Lumineux (White Theme)',
-    themeCharcoalNavy: '2. Bleu Nuit Charbon (Charcoal Navy)',
-    themePetroleumGreen: '3. Vert Pétrole (Petroleum Green)',
-    themeIsonilOriginal: '4. Identité Originale ISONIL (Original Identity)',
+    themeColorTitle: 'Palette des thèmes',
+    themeWhite: 'Blanc (White)',
+    themeCharcoalNavy: 'Bleu Nuit Charbon (Charcoal)',
+    themePetroleumGreen: 'Vert Pétrole (Petroleum)',
+    themeIsonilOriginal: 'Identité Originale (ISONIL)',
 
     // Icon Size Controls
-    iconSizeTitle: 'Taille des icônes :',
-    iconSizeSmall: 'Petite (Compacte)',
-    iconSizeMedium: 'Moyenne (Défaut)',
-    iconSizeLarge: 'Grande (Haute Visibilité)',
+    iconSizeTitle: 'Taille des icônes',
+    iconSizeSmall: 'Petite',
+    iconSizeMedium: 'Moyenne',
+    iconSizeLarge: 'Grande',
 
     // Notification Center
     notificationsTitle: 'Centre des Notifications',
@@ -401,10 +409,10 @@ export const translations = {
 
     // Attachment Categories
     categoryAll: 'Tous',
-    categoryPhoto: 'Photographies',
-    categoryVideo: 'Enregistrements vidéo',
-    categoryDocument: 'Documents et contrats',
-    categoryNote: 'Notes et rapports techniques',
+    categoryPhoto: 'Photos',
+    categoryVideo: 'Vidéos',
+    categoryDocument: 'Documents',
+    categoryNote: 'Notes et rapports',
     categoryOther: 'Autres fichiers',
 
     // Video Player & Formats
