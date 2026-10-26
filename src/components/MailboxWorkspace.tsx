@@ -591,9 +591,11 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                             e.stopPropagation();
                             onOpenViewer(att);
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold border border-[#79C8E8]/30 transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold border border-[#79C8E8]/30 transition-colors cursor-pointer"
+                          title={lang === 'ar' ? 'معاينة المرفق' : 'Aperçu du document'}
                         >
-                          {lang === 'ar' ? 'عرض' : 'Ouvrir'}
+                          <Eye className="w-3.5 h-3.5 text-[#79C8E8]" />
+                          <span>{lang === 'ar' ? 'معاينة' : 'Aperçu'}</span>
                         </button>
                         {att.folder === 'trash' && onRestoreAttachment ? (
                           <button
@@ -815,9 +817,11 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                           e.stopPropagation();
                           onOpenViewer(att);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold border border-[#79C8E8]/30"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold border border-[#79C8E8]/30 cursor-pointer"
+                        title={lang === 'ar' ? 'معاينة المرفق' : 'Aperçu du document'}
                       >
-                        {lang === 'ar' ? 'عرض' : 'Ouvrir'}
+                        <Eye className="w-3.5 h-3.5 text-[#79C8E8]" />
+                        <span>{lang === 'ar' ? 'معاينة' : 'Aperçu'}</span>
                       </button>
                       <button
                         onClick={(e) => {
@@ -1029,9 +1033,11 @@ export const MailboxWorkspace: React.FC<MailboxWorkspaceProps> = ({
                             e.stopPropagation();
                             onOpenViewer(att);
                           }}
-                          className="px-2.5 py-1 rounded bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold"
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0B192C] hover:bg-[#162942] text-white text-xs font-semibold cursor-pointer border border-[#79C8E8]/25"
+                          title={lang === 'ar' ? 'معاينة المرفق' : 'Aperçu du document'}
                         >
-                          {lang === 'ar' ? 'معاينة' : 'Ouvrir'}
+                          <Eye className="w-3.5 h-3.5 text-[#79C8E8]" />
+                          <span>{lang === 'ar' ? 'معاينة' : 'Aperçu'}</span>
                         </button>
                         {att.folder === 'trash' && onRestoreAttachment ? (
                           <button

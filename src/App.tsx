@@ -753,19 +753,109 @@ export default function App() {
     );
   };
 
-  // Handler: Forward attachment
-  const handleForwardAttachment = (attachmentId: string, email: string, note: string) => {
-    setAttachments((prev) =>
-      prev.map((att) => {
-        if (att.id === attachmentId) {
-          return {
-            ...att,
-            notes: (att.notes ? att.notes + '\n\n' : '') + `[Transféré à: ${email}] ${note}`,
-          };
-        }
-        return att;
-      })
-    );
+  // Handler: Real Forward attachment via Email Service
+  const handleForwardAttachment = async (
+    attachmentId: string,
+    email: string,
+    note: string
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    message?: string;
+    messageId?: string;
+    previewUrl?: string | null;
+  }> => {
+    const targetAtt = attachments.find((a) => a.id === attachmentId);
+    if (!targetAtt) {
+      return {
+        success: false,
+        error: 'NOT_FOUND',
+        message: lang === 'ar' ? 'المرفق غير موجود' : 'Fichier introuvable',
+      };
+    }
+
+    try {
+      const response = await fetch('/api/forward-attachment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          attachment: targetAtt,
+          recipientEmail: email,
+          note,
+          senderEmail: currentUser?.email || 'contact@isonil.com',
+          senderName: currentUser?.fullName || 'Direction ISONIL',
+          senderRole: currentUser?.role || 'client',
+          clientId: currentUser?.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Only update local notes if real delivery succeeded
+        const timestamp = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-MA' : 'fr-FR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        const transferLog = `[${timestamp} - Transféré à: ${email}] ${note}`.trim();
+
+        setAttachments((prev) =>
+          prev.map((att) => {
+            if (att.id === attachmentId) {
+              const updatedAtt = {
+                ...att,
+                notes: (att.notes ? att.notes + '\n\n' : '') + transferLog,
+              };
+              const assignedClient = users.find((u) => u.id === updatedAtt.clientId);
+              syncAttachmentToFirestore(updatedAtt, assignedClient?.email).catch(() => {});
+              return updatedAtt;
+            }
+            return att;
+          })
+        );
+
+        // Add a notification item
+        const newNotif: NotificationItem = {
+          id: `notif-${Date.now()}`,
+          title: lang === 'ar' ? 'تم إرسال المرفق بنجاح' : 'Document transféré avec succès',
+          message:
+            lang === 'ar'
+              ? `تم إرسال «${targetAtt.title}» إلى ${email}`
+              : `«${targetAtt.title}» envoyé à ${email}`,
+          date: new Date().toISOString(),
+          read: false,
+          type: 'attachment',
+          targetAttachmentId: attachmentId,
+        };
+        setNotifications((prev) => [newNotif, ...prev]);
+
+        return {
+          success: true,
+          messageId: data.messageId,
+          previewUrl: data.previewUrl,
+          message: data.message,
+        };
+      } else {
+        return {
+          success: false,
+          error: data.error || 'DELIVERY_FAILED',
+          message:
+            data.message ||
+            (lang === 'ar' ? 'فشل إرسال البريد الإلكتروني' : "Échec de l'envoi de l'e-mail"),
+        };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        error: 'NETWORK_ERROR',
+        message:
+          lang === 'ar'
+            ? `تعذر الاتصال بخدمة البريد: ${err?.message || 'خطأ في الشبكة'}`
+            : `Impossible de contacter le service de messagerie: ${err?.message || 'Erreur réseau'}`,
+      };
+    }
   };
 
   // Handler: Notifications actions

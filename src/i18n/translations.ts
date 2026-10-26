@@ -145,7 +145,11 @@ export const translations = {
     forwardTitle: 'إعادة توجيه المرفق لفريق العمل',
     forwardRecipient: 'البريد الإلكتروني للمستلم',
     forwardMessage: 'إضافة رسالة توضيحية',
-    forwardSuccess: 'تمت إعادة التوجيه بنجاح إلى المستلم المحدد',
+    forwardSuccess: 'تم إرسال المرفق بالبريد بنجاح والتأكد من استلامه',
+    forwardSending: 'جاري الإرسال الفعلي للمرفق عبر خادم البريد...',
+    forwardError: 'تعذر إرسال البريد الإلكتروني',
+    forwardReceipt: 'رقم إيصال الإرسال:',
+    forwardPreviewLink: 'معاينة الرسالة والمرفق في صندوق الاستلام',
     downloading: 'جاري تنزيل الملف...',
     downloadComplete: 'اكتمل التنزيل بنجاح',
 
@@ -435,6 +439,10 @@ export const translations = {
     forwardRecipient: 'Adresse e-mail du destinataire',
     forwardMessage: 'Message explicatif complémentaire',
     forwardSuccess: 'Document transféré avec succès au destinataire spécifié',
+    forwardSending: 'Envoi effectif du fichier en cours...',
+    forwardError: "Échec de l'envoi de l'e-mail",
+    forwardReceipt: "N° d'accusé de réception :",
+    forwardPreviewLink: "Aperçu du message et pièce jointe",
     downloading: 'Téléchargement en cours...',
     downloadComplete: 'Téléchargement terminé avec succès',
 

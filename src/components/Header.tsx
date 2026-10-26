@@ -97,7 +97,6 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, [showContactMenu, showSettingsMenu]);
 
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("Centre Andalousie El Jadida Maroc")}`;
   const whatsappUrl = "https://wa.me/212710738409";
   const phoneCallUrl = "tel:+212710738409";
   const emailMailtoUrl = "mailto:contact@isonil.com?subject=Demande%20Portail%20Clients%20ISONIL";
@@ -441,23 +440,18 @@ export const Header: React.FC<HeaderProps> = ({
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-white" />
                   </a>
 
-                  <a
-                    href={googleMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start justify-between p-2.5 rounded-xl bg-[#0B192C] hover:bg-[#162942] border border-[#79C8E8]/25 transition-colors group cursor-pointer"
+                  {/* Company Address - Plain static text only, unclickable and not linked to Google Maps */}
+                  <div
+                    className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[#0B192C] border border-[#79C8E8]/25 select-text"
                   >
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-[#162942] flex items-center justify-center theme-text shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
-                        <MapPin className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="text-slate-400 block text-[10px]">{t.headquartersAddressLabel}</span>
-                        <span className="text-slate-200 block text-[11px] leading-snug">{t.companyAddress}</span>
-                      </div>
+                    <div className="w-7 h-7 rounded-lg bg-[#162942] flex items-center justify-center theme-text shrink-0 mt-0.5">
+                      <MapPin className="w-3.5 h-3.5" />
                     </div>
-                    <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-white shrink-0 ms-2 mt-1" />
-                  </a>
+                    <div className="min-w-0">
+                      <span className="text-slate-400 block text-[10px]">{t.headquartersAddressLabel}</span>
+                      <span className="text-slate-200 block text-[11px] leading-snug">{t.companyAddress}</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-3 pt-2.5 border-t border-[#79C8E8]/20 flex items-center gap-2 text-[11px] text-slate-300">

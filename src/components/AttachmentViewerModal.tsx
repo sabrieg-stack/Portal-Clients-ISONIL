@@ -20,7 +20,9 @@ import {
   Maximize2, 
   Film,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
 import { Attachment, Language, Project } from '../types';
 import { translations } from '../i18n/translations';
@@ -31,7 +33,17 @@ interface AttachmentViewerModalProps {
   project?: Project;
   lang: Language;
   onClose: () => void;
-  onForward?: (attachmentId: string, email: string, note: string) => void;
+  onForward?: (
+    attachmentId: string,
+    email: string,
+    note: string
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    message?: string;
+    messageId?: string;
+    previewUrl?: string | null;
+  }> | void;
   onDelete?: (attachmentId: string) => void;
 }
 
@@ -52,7 +64,11 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [forwardEmail, setForwardEmail] = useState('');
   const [forwardNote, setForwardNote] = useState('');
+  const [isForwarding, setIsForwarding] = useState(false);
   const [forwardSuccess, setForwardSuccess] = useState(false);
+  const [forwardError, setForwardError] = useState<string | null>(null);
+  const [forwardReceiptId, setForwardReceiptId] = useState<string | null>(null);
+  const [forwardPreviewUrl, setForwardPreviewUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Video player state
@@ -181,17 +197,34 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  const handleForwardSubmit = (e: React.FormEvent) => {
+  const handleForwardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forwardEmail) return;
-    if (onForward) onForward(attachment.id, forwardEmail, forwardNote);
-    setForwardSuccess(true);
-    setTimeout(() => {
-      setShowForwardModal(false);
-      setForwardSuccess(false);
-      setForwardEmail('');
-      setForwardNote('');
-    }, 2000);
+    if (!forwardEmail || isForwarding) return;
+
+    setIsForwarding(true);
+    setForwardError(null);
+    setForwardReceiptId(null);
+    setForwardPreviewUrl(null);
+
+    try {
+      if (onForward) {
+        const result = await onForward(attachment.id, forwardEmail, forwardNote);
+        if (result && !result.success) {
+          setForwardError(result.message || t.forwardError);
+          setIsForwarding(false);
+          return;
+        }
+        if (result && result.success) {
+          setForwardReceiptId(result.messageId || null);
+          setForwardPreviewUrl(result.previewUrl || null);
+        }
+      }
+      setForwardSuccess(true);
+    } catch (err: any) {
+      setForwardError(err?.message || t.forwardError);
+    } finally {
+      setIsForwarding(false);
+    }
   };
 
   const toggleVideoPlayback = () => {
@@ -295,7 +328,13 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
 
             {/* Forward Button */}
             <button
-              onClick={() => setShowForwardModal(true)}
+              onClick={() => {
+                setShowForwardModal(true);
+                setForwardSuccess(false);
+                setForwardError(null);
+                setForwardReceiptId(null);
+                setForwardPreviewUrl(null);
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#162942] hover:bg-[#1f3758] text-white text-xs font-semibold border border-[#79C8E8]/25 transition-colors cursor-pointer"
             >
               <Forward className={`w-4 h-4 text-[#79C8E8] ${lang === 'ar' ? 'rotate-180' : ''}`} />
@@ -717,12 +756,64 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
             </div>
 
             {forwardSuccess ? (
-              <div className="text-center py-6">
-                <Check className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-                <p className="text-sm font-semibold text-white">{t.forwardSuccess}</p>
+              <div className="text-center py-5 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                  <Check className="w-7 h-7" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">{t.forwardSuccess}</h4>
+                  <p className="text-xs text-slate-300 mt-1">
+                    {lang === 'ar' ? 'تم الإرسال الفعلي مع المرفق إلى:' : 'Envoyé avec pièce jointe à :'} <span className="font-mono text-[#DFC57B] font-semibold">{forwardEmail}</span>
+                  </p>
+                </div>
+
+                {forwardReceiptId && (
+                  <div className="p-2.5 rounded-xl bg-[#0B192C] border border-[#79C8E8]/20 text-[11px] text-slate-400 font-mono break-all text-start">
+                    <span className="text-slate-500 block text-[10px]">{t.forwardReceipt}</span>
+                    {forwardReceiptId}
+                  </div>
+                )}
+
+                {forwardPreviewUrl && (
+                  <div className="pt-1">
+                    <a
+                      href={forwardPreviewUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#162942] hover:bg-[#1f3758] text-[#79C8E8] text-xs font-semibold border border-[#79C8E8]/30 transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>{t.forwardPreviewLink}</span>
+                    </a>
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      setShowForwardModal(false);
+                      setForwardSuccess(false);
+                      setForwardEmail('');
+                      setForwardNote('');
+                    }}
+                    className="px-5 py-2 rounded-xl bg-[#DFC57B] text-[#0B192C] text-xs font-bold hover:bg-[#d4b663] cursor-pointer"
+                  >
+                    {lang === 'ar' ? 'إغلاق' : 'Fermer'}
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleForwardSubmit} className="space-y-4">
+                {forwardError && (
+                  <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-200 text-xs flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-semibold">{t.forwardError}</p>
+                      <p className="text-[11px] text-red-300 leading-relaxed">{forwardError}</p>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-semibold text-white mb-1">
                     {t.forwardRecipient} *
@@ -730,10 +821,11 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
                   <input
                     type="email"
                     required
+                    disabled={isForwarding}
                     value={forwardEmail}
                     onChange={(e) => setForwardEmail(e.target.value)}
                     placeholder="destinataire@entreprise.ma"
-                    className="w-full px-3 py-2 rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 focus:border-[#DFC57B] focus:outline-none text-white text-xs"
+                    className="w-full px-3 py-2 rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 focus:border-[#DFC57B] focus:outline-none text-white text-xs disabled:opacity-50"
                   />
                 </div>
 
@@ -743,26 +835,39 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
                   </label>
                   <textarea
                     rows={3}
+                    disabled={isForwarding}
                     value={forwardNote}
                     onChange={(e) => setForwardNote(e.target.value)}
                     placeholder={lang === 'ar' ? 'ملاحظة توضيحية...' : 'Message complémentaire...'}
-                    className="w-full px-3 py-2 rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 focus:border-[#DFC57B] focus:outline-none text-white text-xs resize-none"
+                    className="w-full px-3 py-2 rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 focus:border-[#DFC57B] focus:outline-none text-white text-xs resize-none disabled:opacity-50"
                   />
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
+                    disabled={isForwarding}
                     onClick={() => setShowForwardModal(false)}
-                    className="px-4 py-2 rounded-xl bg-[#162942] text-slate-200 text-xs font-medium cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-[#162942] text-slate-200 text-xs font-medium cursor-pointer disabled:opacity-50"
                   >
                     {t.cancel}
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl bg-[#DFC57B] text-[#0B192C] text-xs font-bold cursor-pointer"
+                    disabled={isForwarding}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#DFC57B] text-[#0B192C] text-xs font-bold cursor-pointer disabled:opacity-50 hover:bg-[#d4b663]"
                   >
-                    {t.forward}
+                    {isForwarding ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>{t.forwardSending}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Forward className={`w-3.5 h-3.5 ${lang === 'ar' ? 'rotate-180' : ''}`} />
+                        <span>{t.forward}</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </form>
