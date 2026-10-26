@@ -45,6 +45,8 @@ import {
   syncProjectToFirestore,
   syncAttachmentToFirestore,
   deleteAttachmentFromFirestore,
+  deleteProjectFromFirestore,
+  deleteUserFromFirestore,
   syncPendingRegistrationToFirestore,
   deletePendingRegistrationFromFirestore,
 } from './firebase';
@@ -753,6 +755,139 @@ export default function App() {
     );
   };
 
+  // Handler: Admin permanently deletes an attachment
+  const handleAdminPermanentDeleteAttachment = (attachmentId: string) => {
+    if (currentUser?.role !== 'admin') return;
+    const target = attachments.find((a) => a.id === attachmentId);
+    if (!target) return;
+
+    setAttachments((prev) => prev.filter((att) => att.id !== attachmentId));
+    deleteAttachmentFromFirestore(attachmentId).catch(() => {});
+
+    if (selectedAttachmentForViewer?.id === attachmentId) {
+      setSelectedAttachmentForViewer(null);
+    }
+
+    const notif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: lang === 'ar' ? `تم حذف المرفق نهائياً: ${target.title}` : `Document supprimé définitivement: ${target.title}`,
+      message: lang === 'ar'
+        ? `تم حذف الملف "${target.title}" التابع لمشروع "${target.projectName}" نهائياً من قاعدة البيانات.`
+        : `Le fichier "${target.title}" du projet "${target.projectName}" a été supprimé définitivement.`,
+      date: new Date().toISOString(),
+      read: false,
+      type: 'system',
+    };
+    setNotifications((prev) => [notif, ...prev]);
+  };
+
+  // Handler: Admin deletes a project and cleans up related attachments and client assignments
+  const handleDeleteProject = (projectId: string) => {
+    if (currentUser?.role !== 'admin') return;
+    const targetProject = projects.find((p) => p.id === projectId);
+    if (!targetProject) return;
+
+    const relatedAttachments = attachments.filter((a) => a.projectId === projectId);
+
+    // 1. Remove project from state and Firestore
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    deleteProjectFromFirestore(projectId).catch(() => {});
+
+    // 2. Remove related attachments from state and Firestore
+    if (relatedAttachments.length > 0) {
+      const relatedIds = new Set(relatedAttachments.map((a) => a.id));
+      setAttachments((prev) => prev.filter((a) => !relatedIds.has(a.id)));
+      relatedAttachments.forEach((att) => {
+        deleteAttachmentFromFirestore(att.id).catch(() => {});
+      });
+      if (selectedAttachmentForViewer && relatedIds.has(selectedAttachmentForViewer.id)) {
+        setSelectedAttachmentForViewer(null);
+      }
+    }
+
+    // 3. Remove projectId from any user's assignedProjectIds and sync to Firestore
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.assignedProjectIds && u.assignedProjectIds.includes(projectId)) {
+          const updatedUser: User = {
+            ...u,
+            assignedProjectIds: u.assignedProjectIds.filter((id) => id !== projectId),
+          };
+          syncUserToFirestore(updatedUser, updatedUser.uid).catch(() => {});
+          return updatedUser;
+        }
+        return u;
+      })
+    );
+
+    const notif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: lang === 'ar' ? `تم حذف المشروع: ${targetProject.name}` : `Projet supprimé: ${targetProject.name}`,
+      message: lang === 'ar'
+        ? `تم حذف مشروع "${targetProject.name}" نهائياً مع إزالة ${relatedAttachments.length} من المرفقات المرتبطة به.`
+        : `Le projet "${targetProject.name}" et ses ${relatedAttachments.length} documents associés ont été supprimés.`,
+      date: new Date().toISOString(),
+      read: false,
+      type: 'project',
+    };
+    setNotifications((prev) => [notif, ...prev]);
+  };
+
+  // Handler: Admin deletes a client account along with their projects and attachments
+  const handleDeleteClient = (clientId: string) => {
+    if (currentUser?.role !== 'admin') return;
+    const targetClient = users.find((u) => u.id === clientId && u.role !== 'admin');
+    if (!targetClient) return;
+
+    const clientProjectsToDelete = projects.filter(
+      (p) => p.clientId === clientId || (targetClient.assignedProjectIds && targetClient.assignedProjectIds.includes(p.id))
+    );
+    const clientProjectIds = new Set(clientProjectsToDelete.map((p) => p.id));
+    const clientAttachmentsToDelete = attachments.filter(
+      (a) => a.clientId === clientId || (targetClient.uid && a.clientId === targetClient.uid) || clientProjectIds.has(a.projectId)
+    );
+    const clientAttachmentIds = new Set(clientAttachmentsToDelete.map((a) => a.id));
+
+    // 1. Remove client from state and Firestore
+    setUsers((prev) => prev.filter((u) => u.id !== clientId));
+    deleteUserFromFirestore(clientId).catch(() => {});
+    if (targetClient.uid && targetClient.uid !== clientId) {
+      deleteUserFromFirestore(targetClient.uid).catch(() => {});
+    }
+
+    // 2. Remove client's projects from state and Firestore
+    if (clientProjectsToDelete.length > 0) {
+      setProjects((prev) => prev.filter((p) => !clientProjectIds.has(p.id)));
+      clientProjectsToDelete.forEach((proj) => {
+        deleteProjectFromFirestore(proj.id).catch(() => {});
+      });
+    }
+
+    // 3. Remove client's attachments from state and Firestore
+    if (clientAttachmentsToDelete.length > 0) {
+      setAttachments((prev) => prev.filter((a) => !clientAttachmentIds.has(a.id)));
+      clientAttachmentsToDelete.forEach((att) => {
+        deleteAttachmentFromFirestore(att.id).catch(() => {});
+      });
+      if (selectedAttachmentForViewer && clientAttachmentIds.has(selectedAttachmentForViewer.id)) {
+        setSelectedAttachmentForViewer(null);
+      }
+    }
+
+    const notif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      title: lang === 'ar' ? `تم حذف حساب العميل: ${targetClient.companyName}` : `Compte client supprimé: ${targetClient.companyName}`,
+      message: lang === 'ar'
+        ? `تم حذف حساب "${targetClient.companyName}" (${targetClient.fullName}) مع ${clientProjectsToDelete.length} مشاريع و ${clientAttachmentsToDelete.length} مرفقات مرتبطة.`
+        : `Le compte "${targetClient.companyName}" a été supprimé avec ${clientProjectsToDelete.length} projets et ${clientAttachmentsToDelete.length} documents.`,
+      date: new Date().toISOString(),
+      read: false,
+      type: 'account',
+    };
+    setNotifications((prev) => [notif, ...prev]);
+  };
+
+
   // Handler: Real Forward attachment via Email Service
   const handleForwardAttachment = async (
     attachmentId: string,
@@ -1055,6 +1190,9 @@ export default function App() {
                 onDispatchAttachment={handleUploadSuccess}
                 onOpenViewer={(att) => setSelectedAttachmentForViewer(att)}
                 onCreateProject={handleCreateProject}
+                onDeleteProject={handleDeleteProject}
+                onDeleteClient={handleDeleteClient}
+                onDeleteAttachment={handleAdminPermanentDeleteAttachment}
                 onCreateBackup={handleCreateBackup}
                 onRestoreBackup={handleRestoreBackup}
                 showAdminLinkOnClient={showAdminLinkOnClient}

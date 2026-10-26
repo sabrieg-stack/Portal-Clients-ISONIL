@@ -272,6 +272,26 @@ export async function deleteAttachmentFromFirestore(attachmentId: string): Promi
   }
 }
 
+export async function deleteProjectFromFirestore(projectId: string): Promise<void> {
+  if (!auth.currentUser) return;
+  const docId = sanitizeId(projectId);
+  try {
+    await deleteDoc(doc(db, 'projects', docId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `projects/${docId}`);
+  }
+}
+
+export async function deleteUserFromFirestore(userId: string): Promise<void> {
+  if (!auth.currentUser) return;
+  const docId = sanitizeId(userId);
+  try {
+    await deleteDoc(doc(db, 'users', docId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `users/${docId}`);
+  }
+}
+
 export async function syncPendingRegistrationToFirestore(pending: PendingRegistration): Promise<void> {
   const docId = sanitizeId(pending.id);
   const payload: Record<string, unknown> = {

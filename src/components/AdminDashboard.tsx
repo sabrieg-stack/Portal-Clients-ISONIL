@@ -27,7 +27,11 @@ import {
   Link2,
   Copy,
   Check,
-  ShieldCheck
+  ShieldCheck,
+  Trash2,
+  Eye,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Attachment, AttachmentCategory, Language, PendingRegistration, Project, ProjectCategory, User, BackupSnapshot } from '../types';
 import { translations } from '../i18n/translations';
@@ -44,6 +48,9 @@ interface AdminDashboardProps {
   onDispatchAttachment: (newAttachment: Attachment) => void;
   onOpenViewer: (attachment: Attachment) => void;
   onCreateProject: (projectData: Omit<Project, 'id' | 'totalStorageBytes'>) => void;
+  onDeleteProject?: (projectId: string) => void;
+  onDeleteClient?: (clientId: string) => void;
+  onDeleteAttachment?: (attachmentId: string) => void;
   onCreateBackup: (note?: string) => void;
   onRestoreBackup: (snapshotId: string) => void;
   onImportBackup?: (jsonStr: string) => void;
@@ -61,7 +68,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onApproveAccount,
   onRejectAccount,
   onDispatchAttachment,
+  onOpenViewer,
   onCreateProject,
+  onDeleteProject,
+  onDeleteClient,
+  onDeleteAttachment,
   onCreateBackup,
   onRestoreBackup,
   showAdminLinkOnClient = false,
@@ -98,6 +109,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [backupNote, setBackupNote] = useState('');
   const [selectedBackupForRestore, setSelectedBackupForRestore] = useState<BackupSnapshot | null>(null);
   const [restoreConfirmedSuccess, setRestoreConfirmedSuccess] = useState(false);
+
+  // Project Attachments Drawer & Destructive Action Confirmation State
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<{
+    type: 'project' | 'client' | 'attachment';
+    id: string;
+    name: string;
+    subtext?: string;
+    relatedProjectsCount?: number;
+    relatedAttachmentsCount?: number;
+  } | null>(null);
+  const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
+
+  const handleConfirmDeleteAction = () => {
+    if (!confirmDeleteTarget) return;
+    if (confirmDeleteTarget.type === 'project' && onDeleteProject) {
+      onDeleteProject(confirmDeleteTarget.id);
+      setDeleteSuccessMessage(
+        lang === 'ar'
+          ? `تم حذف المشروع "${confirmDeleteTarget.name}" وجميع المرفقات المرتبطة به بنجاح.`
+          : `Le projet "${confirmDeleteTarget.name}" et ses documents associés ont été supprimés.`
+      );
+    } else if (confirmDeleteTarget.type === 'client' && onDeleteClient) {
+      onDeleteClient(confirmDeleteTarget.id);
+      setDeleteSuccessMessage(
+        lang === 'ar'
+          ? `تم حذف حساب العميل "${confirmDeleteTarget.name}" والمشاريع والمرفقات المرتبطة به بنجاح.`
+          : `Le compte client "${confirmDeleteTarget.name}" et ses données associées ont été supprimés.`
+      );
+    } else if (confirmDeleteTarget.type === 'attachment' && onDeleteAttachment) {
+      onDeleteAttachment(confirmDeleteTarget.id);
+      setDeleteSuccessMessage(
+        lang === 'ar'
+          ? `تم حذف المرفق "${confirmDeleteTarget.name}" نهائياً بنجاح.`
+          : `Le document "${confirmDeleteTarget.name}" a été supprimé définitivement.`
+      );
+    }
+    setConfirmDeleteTarget(null);
+    setTimeout(() => {
+      setDeleteSuccessMessage(null);
+    }, 4000);
+  };
 
   // Flexible storage usage calculation (includes active + 30-day recoverable trash files, without arbitrary fixed cap)
   const totalStorageBytes = useMemo(() => {
@@ -241,7 +294,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      
+      {deleteSuccessMessage && (
+        <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{deleteSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDeleteSuccessMessage(null)}
+            className="text-emerald-400 hover:text-white text-xs font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* 1. TOP EXECUTIVE KPI CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-4 shadow-xl">
@@ -505,31 +573,146 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             ) : (
               <div className="divide-y divide-[#79C8E8]/15">
-                {projects.map((proj) => (
-                  <div key={proj.id} className="p-4 hover:bg-[#162942]/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-white text-sm truncate">{proj.name}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0B192C] text-[#DFC57B] border border-[#DFC57B]/40 font-mono">
-                          {proj.type}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-[#79C8E8]" />
-                        <span>{proj.location}</span>
-                        <span>·</span>
-                        <span className="text-[#A9DDF1] font-medium">{proj.clientName}</span>
-                      </p>
-                    </div>
+                {projects.map((proj) => {
+                  const projAttachments = attachments.filter((a) => a.projectId === proj.id);
+                  const activeProjAttachments = projAttachments.filter((a) => a.folder !== 'trash');
+                  const isExpanded = expandedProjectId === proj.id;
 
-                    <div className="flex items-center gap-3 text-xs text-slate-300 shrink-0">
-                      <span className="px-2.5 py-1 rounded-md bg-[#0B192C] text-white font-mono">
-                        {attachments.filter((a) => a.projectId === proj.id && a.folder !== 'trash').length} {lang === 'ar' ? 'مرفقات' : 'docs'}
-                      </span>
-                      <span className="text-emerald-400 font-semibold">{lang === 'ar' ? 'قيد التنفيذ' : 'En cours'}</span>
+                  return (
+                    <div key={proj.id} className="transition-colors">
+                      <div className="p-4 hover:bg-[#162942]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-sm truncate">{proj.name}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0B192C] text-[#DFC57B] border border-[#DFC57B]/40 font-mono">
+                              {proj.type}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-2 flex-wrap">
+                            <MapPin className="w-3.5 h-3.5 text-[#79C8E8]" />
+                            <span>{proj.location}</span>
+                            <span>·</span>
+                            <span className="text-[#A9DDF1] font-medium">{proj.clientName}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 text-xs text-slate-300 shrink-0 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedProjectId(isExpanded ? null : proj.id)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0B192C] hover:bg-[#162942] border border-[#79C8E8]/25 text-white font-mono transition-colors cursor-pointer"
+                            title={lang === 'ar' ? 'عرض وإدارة مرفقات المشروع' : 'Voir et gérer les fichiers du projet'}
+                          >
+                            <span>
+                              {activeProjAttachments.length} {lang === 'ar' ? 'مرفقات' : 'docs'}
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-[#DFC57B]" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-[#79C8E8]" />
+                            )}
+                          </button>
+
+                          <span className="text-emerald-400 font-semibold hidden md:inline">
+                            {lang === 'ar' ? 'قيد التنفيذ' : 'En cours'}
+                          </span>
+
+                          {onDeleteProject && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setConfirmDeleteTarget({
+                                  type: 'project',
+                                  id: proj.id,
+                                  name: proj.name,
+                                  subtext: `${proj.location} — ${proj.clientName}`,
+                                  relatedAttachmentsCount: projAttachments.length,
+                                })
+                              }
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/50 hover:bg-red-600 text-red-300 hover:text-white border border-red-800/60 text-xs font-bold transition-all cursor-pointer"
+                              title={lang === 'ar' ? 'حذف المشروع' : 'Supprimer le projet'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>{lang === 'ar' ? 'حذف المشروع' : 'Supprimer'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Expandable Project Attachments List */}
+                      {isExpanded && (
+                        <div className="bg-[#0B192C]/90 border-t border-[#79C8E8]/15 px-4 py-3 space-y-2">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-[#DFC57B]">
+                            <span>
+                              {lang === 'ar'
+                                ? `المرفقات والملفات المرتبطة بمشروع: ${proj.name}`
+                                : `Fichiers associés au projet : ${proj.name}`}
+                            </span>
+                            <span className="font-mono text-slate-400">
+                              {projAttachments.length} {lang === 'ar' ? 'ملف' : 'fichiers'}
+                            </span>
+                          </div>
+
+                          {projAttachments.length === 0 ? (
+                            <p className="text-xs text-slate-400 py-2">
+                              {lang === 'ar'
+                                ? 'لا توجد مرفقات مسجلة لهذا المشروع حالياً.'
+                                : 'Aucun fichier rattaché à ce projet.'}
+                            </p>
+                          ) : (
+                            <div className="divide-y divide-[#79C8E8]/10">
+                              {projAttachments.map((att) => (
+                                <div
+                                  key={att.id}
+                                  className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                                >
+                                  <div className="min-w-0 flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-[#79C8E8] shrink-0" />
+                                    <div className="min-w-0">
+                                      <p className="text-white font-semibold truncate">{att.title}</p>
+                                      <p className="text-[11px] text-slate-400 truncate font-mono">
+                                        {att.fileName} · {(att.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => onOpenViewer(att)}
+                                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#112239] hover:bg-[#162942] text-[#79C8E8] border border-[#79C8E8]/30 text-[11px] font-semibold cursor-pointer"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      <span>{lang === 'ar' ? 'معاينة' : 'Aperçu'}</span>
+                                    </button>
+
+                                    {onDeleteAttachment && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setConfirmDeleteTarget({
+                                            type: 'attachment',
+                                            id: att.id,
+                                            name: att.title,
+                                            subtext: `${att.fileName} (${proj.name})`,
+                                          })
+                                        }
+                                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-950/50 hover:bg-red-600 text-red-300 hover:text-white border border-red-800/60 text-[11px] font-bold transition-colors cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <span>{lang === 'ar' ? 'حذف المرفق' : 'Supprimer'}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -816,6 +999,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
           </form>
+
+          {/* Manage All Attachments Section */}
+          <div className="mt-8 pt-6 border-t border-[#79C8E8]/20">
+            <div className="flex items-center justify-between mb-3">
+              <h5 className="text-xs font-bold text-[#DFC57B] uppercase tracking-wider">
+                {lang === 'ar' ? 'سجل المرفقات المنشورة (معاينة وحذف)' : 'Documents Publiés (Aperçu & Suppression)'}
+              </h5>
+              <span className="text-xs font-mono text-[#A9DDF1]">
+                {attachments.length} {lang === 'ar' ? 'ملف' : 'fichiers'}
+              </span>
+            </div>
+
+            {attachments.length === 0 ? (
+              <p className="text-xs text-slate-400 py-4 text-center">
+                {lang === 'ar' ? 'لا توجد مرفقات منشورة حالياً.' : 'Aucun document publié.'}
+              </p>
+            ) : (
+              <div className="divide-y divide-[#79C8E8]/15 bg-[#0B192C] rounded-xl border border-[#79C8E8]/20 overflow-hidden">
+                {attachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className="p-3 hover:bg-[#162942]/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold text-white truncate">{att.title}</p>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {att.projectName} · <span className="font-mono text-[#79C8E8]">{att.fileName}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onOpenViewer(att)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#112239] hover:bg-[#162942] text-[#79C8E8] border border-[#79C8E8]/30 text-[11px] font-semibold cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>{lang === 'ar' ? 'معاينة' : 'Aperçu'}</span>
+                      </button>
+                      {onDeleteAttachment && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmDeleteTarget({
+                              type: 'attachment',
+                              id: att.id,
+                              name: att.title,
+                              subtext: `${att.fileName} — ${att.projectName}`,
+                            })
+                          }
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-950/50 hover:bg-red-600 text-red-300 hover:text-white border border-red-800/60 text-[11px] font-bold transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>{lang === 'ar' ? 'حذف المرفق' : 'Supprimer'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -840,26 +1084,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          <div className="divide-y divide-[#79C8E8]/15">
-            {clientUsers.filter((u) => u.companyName.toLowerCase().includes(clientSearch.toLowerCase())).map((u) => (
-              <div key={u.id} className="p-4 hover:bg-[#162942]/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-white text-sm">{u.companyName}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800">
-                      {lang === 'ar' ? 'نشط' : 'Actif'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    <span>{u.fullName}</span> · <span className="font-mono text-[#79C8E8]">{u.phone}</span> · <span>{u.email}</span>
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-[#DFC57B] font-mono">
-                  <span>{projects.filter((p) => p.clientId === u.id).length} {lang === 'ar' ? 'مشروع مخصص' : 'projets'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          {clientUsers.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <Users className="w-10 h-10 mx-auto mb-2 opacity-40 text-[#79C8E8]" />
+              <p className="text-xs font-semibold text-white">
+                {lang === 'ar' ? 'لا توجد حسابات عملاء مسجلة حالياً' : 'Aucun compte client enregistré'}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-[#79C8E8]/15">
+              {clientUsers
+                .filter(
+                  (u) =>
+                    u.companyName.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                    u.fullName.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                    u.email.toLowerCase().includes(clientSearch.toLowerCase())
+                )
+                .map((u) => {
+                  const clientProjs = projects.filter(
+                    (p) => p.clientId === u.id || (u.assignedProjectIds && u.assignedProjectIds.includes(p.id))
+                  );
+                  const clientProjIds = new Set(clientProjs.map((p) => p.id));
+                  const clientAtts = attachments.filter(
+                    (a) => a.clientId === u.id || (u.uid && a.clientId === u.uid) || clientProjIds.has(a.projectId)
+                  );
+
+                  return (
+                    <div
+                      key={u.id}
+                      className="p-4 hover:bg-[#162942]/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{u.companyName}</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800">
+                            {lang === 'ar' ? 'نشط' : 'Actif'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          <span>{u.fullName}</span> · <span className="font-mono text-[#79C8E8]">{u.phone}</span> ·{' '}
+                          <span>{u.email}</span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs shrink-0 flex-wrap">
+                        <span className="px-2.5 py-1 rounded-md bg-[#0B192C] text-[#DFC57B] font-mono">
+                          {clientProjs.length} {lang === 'ar' ? 'مشروع مخصص' : 'projets'}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-md bg-[#0B192C] text-[#A9DDF1] font-mono">
+                          {clientAtts.length} {lang === 'ar' ? 'مرفق' : 'fichiers'}
+                        </span>
+                        {onDeleteClient && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfirmDeleteTarget({
+                                type: 'client',
+                                id: u.id,
+                                name: u.companyName,
+                                subtext: `${u.fullName} (${u.email})`,
+                                relatedProjectsCount: clientProjs.length,
+                                relatedAttachmentsCount: clientAtts.length,
+                              })
+                            }
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-950/50 hover:bg-red-600 text-red-300 hover:text-white border border-red-800/60 text-xs font-bold transition-all cursor-pointer"
+                            title={lang === 'ar' ? 'حذف حساب العميل' : 'Supprimer le compte client'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>{lang === 'ar' ? 'حذف العميل' : 'Supprimer le client'}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1101,6 +1400,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* DESTRUCTIVE ACTION CONFIRMATION MODAL (Delete Project / Delete Client / Delete Attachment) */}
+      {confirmDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-[#112239] border border-red-500/40 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-400 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-red-950/80 border border-red-700/60 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h4 className="font-bold text-white text-base">
+                  {confirmDeleteTarget.type === 'project'
+                    ? lang === 'ar'
+                      ? 'تأكيد حذف المشروع نهائياً'
+                      : 'Confirmer la suppression du projet'
+                    : confirmDeleteTarget.type === 'client'
+                    ? lang === 'ar'
+                      ? 'تأكيد حذف حساب العميل نهائياً'
+                      : 'Confirmer la suppression du compte client'
+                    : lang === 'ar'
+                    ? 'تأكيد حذف المرفق نهائياً'
+                    : 'Confirmer la suppression du document'}
+                </h4>
+                <p className="text-[11px] text-red-300">
+                  {lang === 'ar'
+                    ? 'هذا الإجراء نهائي ولا يمكن التراجع عنه في قاعدة البيانات.'
+                    : 'Cette action est irréversible dans la base de données.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-[#0B192C] rounded-xl border border-[#79C8E8]/25 mb-4 space-y-1.5 text-xs">
+              <p className="font-bold text-[#DFC57B] text-sm">{confirmDeleteTarget.name}</p>
+              {confirmDeleteTarget.subtext && (
+                <p className="text-slate-300 font-mono text-[11px]">{confirmDeleteTarget.subtext}</p>
+              )}
+
+              {confirmDeleteTarget.type === 'project' && (
+                <p className="text-amber-300 text-[11px] pt-1 border-t border-[#79C8E8]/15">
+                  {lang === 'ar'
+                    ? `سيتم حذف المشروع وإزالة ${confirmDeleteTarget.relatedAttachmentsCount || 0} من المرفقات المرتبطة به من قاعدة البيانات.`
+                    : `Ce projet ainsi que ses ${confirmDeleteTarget.relatedAttachmentsCount || 0} documents associés seront supprimés.`}
+                </p>
+              )}
+
+              {confirmDeleteTarget.type === 'client' && (
+                <p className="text-amber-300 text-[11px] pt-1 border-t border-[#79C8E8]/15">
+                  {lang === 'ar'
+                    ? `سيتم حذف حساب العميل مع ${confirmDeleteTarget.relatedProjectsCount || 0} مشاريع و ${confirmDeleteTarget.relatedAttachmentsCount || 0} مرفقات مرتبطة به.`
+                    : `Ce compte client ainsi que ${confirmDeleteTarget.relatedProjectsCount || 0} projets et ${confirmDeleteTarget.relatedAttachmentsCount || 0} documents associés seront supprimés.`}
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl bg-[#0B192C] hover:bg-[#162942] border border-[#79C8E8]/25 text-slate-200 text-xs font-semibold cursor-pointer"
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAction}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-lg cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{lang === 'ar' ? 'تأكيد الحذف النهائي' : 'Supprimer définitivement'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
+
