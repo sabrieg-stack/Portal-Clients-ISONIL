@@ -96,6 +96,69 @@ export const INITIAL_BACKUPS: BackupSnapshot[] = [
   },
 ];
 
+export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
+  {
+    id: 'audit-init-1',
+    timestamp: '2025-02-12T11:15:00Z',
+    category: 'modification',
+    action: 'ATTACHMENT_UPLOADED',
+    actorName: 'Direction ISONIL Maroc',
+    actorEmail: 'admin@isonil.com',
+    actorRole: 'admin',
+    targetName: 'Plan_Isometric_Tuyauterie_Ligne14.jpg',
+    details: 'Publication de pièce jointe dans le projet "Projet Isolation Tuyauterie Vapeur HP" (4.01 Mo)',
+    severity: 'info',
+  },
+  {
+    id: 'audit-init-2',
+    timestamp: '2025-02-11T09:42:18Z',
+    category: 'download',
+    action: 'FILE_DOWNLOAD',
+    actorName: 'Karim Bennani — Maroc Phosphore (Jorf Lasfar)',
+    actorEmail: 'client@isonil.com',
+    actorRole: 'client',
+    targetName: 'Rapport_Controle_Calorifuge_Vapeur.pdf',
+    details: 'Téléchargement du rapport technique PDF (2.34 Mo) depuis l\'espace client',
+    severity: 'info',
+  },
+  {
+    id: 'audit-init-3',
+    timestamp: '2025-02-11T09:38:05Z',
+    category: 'login',
+    action: 'USER_LOGIN',
+    actorName: 'Karim Bennani — Maroc Phosphore (Jorf Lasfar)',
+    actorEmail: 'client@isonil.com',
+    actorRole: 'client',
+    targetName: 'Portail Client ISONIL',
+    details: 'Authentification réussie (Session vérifiée)',
+    severity: 'info',
+  },
+  {
+    id: 'audit-init-4',
+    timestamp: '2025-02-10T14:30:00Z',
+    category: 'modification',
+    action: 'ATTACHMENT_UPLOADED',
+    actorName: 'Direction ISONIL Maroc',
+    actorEmail: 'admin@isonil.com',
+    actorRole: 'admin',
+    targetName: 'Rapport_Controle_Calorifuge_Vapeur.pdf',
+    details: 'Création et expédition du document PDF pour "Projet Isolation Tuyauterie Vapeur HP"',
+    severity: 'info',
+  },
+  {
+    id: 'audit-init-5',
+    timestamp: '2025-01-15T08:00:00Z',
+    category: 'modification',
+    action: 'PROJECT_CREATED',
+    actorName: 'Direction ISONIL Maroc',
+    actorEmail: 'admin@isonil.com',
+    actorRole: 'admin',
+    targetName: 'Projet Isolation Tuyauterie Vapeur HP',
+    details: 'Initialisation du chantier sur Plateforme Industrielle Jorf Lasfar (Client: Maroc Phosphore)',
+    severity: 'info',
+  },
+];
+
 // Local storage keys (v4 for backup, theme, session, and notifications support)
 const USERS_STORAGE_KEY = 'isonil_portal_users_v4';
 const PROJECTS_STORAGE_KEY = 'isonil_portal_projects_v4';
@@ -103,6 +166,7 @@ const ATTACHMENTS_STORAGE_KEY = 'isonil_portal_attachments_v4';
 const PENDING_STORAGE_KEY = 'isonil_portal_pending_v4';
 const NOTIFICATIONS_STORAGE_KEY = 'isonil_portal_notifications_v4';
 const BACKUPS_STORAGE_KEY = 'isonil_portal_backups_v4';
+const AUDIT_LOGS_STORAGE_KEY = 'isonil_portal_audit_logs_v1';
 const THEME_STORAGE_KEY = 'isonil_portal_theme_v5';
 const LAYOUT_STORAGE_KEY = 'isonil_portal_layout_v5';
 const ICON_SIZE_STORAGE_KEY = 'isonil_portal_icon_size_v1';
@@ -372,3 +436,25 @@ export function saveStoredIconSize(size: IconSize) {
     console.error('Error saving icon size', e);
   }
 }
+
+export function loadStoredAuditLogs(): AuditLogEntry[] {
+  try {
+    const raw = localStorage.getItem(AUDIT_LOGS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Error loading audit logs', e);
+  }
+  return INITIAL_AUDIT_LOGS;
+}
+
+export function saveStoredAuditLogs(logs: AuditLogEntry[]) {
+  try {
+    localStorage.setItem(AUDIT_LOGS_STORAGE_KEY, JSON.stringify(logs.slice(0, 500)));
+  } catch (e) {
+    console.error('Error saving audit logs', e);
+  }
+}
+

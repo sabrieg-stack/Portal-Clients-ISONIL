@@ -50,6 +50,7 @@ interface AttachmentViewerModalProps {
     previewUrl?: string | null;
   }> | void;
   onDelete?: (attachmentId: string) => void;
+  onDownload?: (attachmentId: string) => void;
 }
 
 export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
@@ -58,6 +59,7 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
   onClose,
   onForward,
   onDelete,
+  onDownload,
 }) => {
   const t = translations[lang];
 
@@ -233,6 +235,9 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+          if (onDownload) {
+            onDownload(attachment.id);
+          }
           setTimeout(() => setDownloadProgress(null), 2500);
         }, 250);
       } else {

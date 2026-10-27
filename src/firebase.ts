@@ -252,6 +252,7 @@ export async function syncAttachmentToFirestore(attachment: Attachment, clientEm
   if (attachment.notes) payload.notes = attachment.notes.slice(0, 2000);
   if (attachment.folder) payload.folder = attachment.folder;
   if (attachment.previewType) payload.previewType = attachment.previewType.slice(0, 30);
+  if (typeof attachment.downloadCount === 'number') payload.downloadCount = Math.max(0, Number(attachment.downloadCount) || 0);
   if (attachment.deletedAt) payload.deletedAt = attachment.deletedAt.slice(0, 64);
   if (attachment.customSection) payload.customSection = attachment.customSection.slice(0, 120);
 

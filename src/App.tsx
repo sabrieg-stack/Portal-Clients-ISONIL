@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Language, User, Project, Attachment, PendingRegistration, LayoutModel, ThemeColor, IconSize, NotificationItem, BackupSnapshot } from './types';
+import { Language, User, Project, Attachment, PendingRegistration, LayoutModel, ThemeColor, IconSize, NotificationItem, BackupSnapshot, AuditLogEntry } from './types';
 import { translations } from './i18n/translations';
 import { 
   loadStoredUsers, 
@@ -14,6 +14,8 @@ import {
   saveStoredNotifications,
   loadStoredBackups,
   saveStoredBackups,
+  loadStoredAuditLogs,
+  saveStoredAuditLogs,
   loadStoredTheme,
   saveStoredTheme,
   loadStoredLayout,
@@ -163,6 +165,16 @@ export default function App() {
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistration[]>(() => loadStoredPending());
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadStoredNotifications());
   const [backups, setBackups] = useState<BackupSnapshot[]>(() => loadStoredBackups());
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => loadStoredAuditLogs());
+
+  const recordAuditLog = (entry: Omit<AuditLogEntry, 'id' | 'timestamp'>) => {
+    const newEntry: AuditLogEntry = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      ...entry,
+    };
+    setAuditLogs((prev) => [newEntry, ...prev]);
+  };
 
   // 6. Current Session: initialized strictly from verified session or null (never default to admin)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -288,6 +300,10 @@ export default function App() {
   useEffect(() => {
     saveStoredBackups(backups);
   }, [backups]);
+
+  useEffect(() => {
+    saveStoredAuditLogs(auditLogs);
+  }, [auditLogs]);
 
   // Listen to Firebase Auth state changes and explicitly verify role from Firestore database
   useEffect(() => {
@@ -488,10 +504,39 @@ export default function App() {
 
     setCurrentUser(authenticatedUser);
     setShowAuthModalManually(false);
+
+    recordAuditLog({
+      category: 'login',
+      action: 'USER_LOGIN',
+      actorName: `${authenticatedUser.fullName} — ${authenticatedUser.companyName}`,
+      actorEmail: authenticatedUser.email,
+      actorRole: verifiedRole,
+      targetName: verifiedRole === 'admin' ? 'Portail Administration ISONIL' : 'Portail Client ISONIL',
+      details:
+        lang === 'ar'
+          ? `تسجيل دخول ناجح بحساب (${verifiedRole === 'admin' ? 'إدارة' : 'عميل'})`
+          : `Connexion authentifiée avec succès (Rôle: ${verifiedRole === 'admin' ? 'Administrateur' : 'Client'})`,
+      severity: 'info',
+    });
   };
 
   // Handler: Logout (clears local & Firebase session and returns to login screen)
   const handleLogout = async () => {
+    if (currentUser) {
+      recordAuditLog({
+        category: 'login',
+        action: 'USER_LOGOUT',
+        actorName: `${currentUser.fullName} — ${currentUser.companyName}`,
+        actorEmail: currentUser.email,
+        actorRole: currentUser.role,
+        targetName: 'Session Portail ISONIL',
+        details:
+          lang === 'ar'
+            ? 'تسجيل خروج آمن وإغلاق الجلسة الحالية'
+            : 'Déconnexion sécurisée et clôture de la session active',
+        severity: 'info',
+      });
+    }
     try {
       await firebaseSignOut(auth);
     } catch {
@@ -593,6 +638,20 @@ export default function App() {
       targetProjectId: newProject.id,
     };
     setNotifications((prev) => [notif, ...prev]);
+
+    recordAuditLog({
+      category: 'modification',
+      action: 'PROJECT_CREATED',
+      actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : 'Direction ISONIL Maroc',
+      actorEmail: currentUser?.email || 'admin@isonil.com',
+      actorRole: currentUser?.role || 'admin',
+      targetName: newProject.name,
+      details:
+        lang === 'ar'
+          ? `إنشاء مشروع جديد في الموقع «${newProject.location}» لصالح ${newProject.clientName}`
+          : `Création du projet sur le site «${newProject.location}» (Client: ${newProject.clientName})`,
+      severity: 'info',
+    });
   };
 
   // Handler: Admin approves account (preserves client password and syncs to Firestore)
@@ -651,12 +710,43 @@ export default function App() {
       type: 'account',
     };
     setNotifications((prev) => [notif, ...prev]);
+
+    recordAuditLog({
+      category: 'modification',
+      action: 'CLIENT_APPROVED',
+      actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : 'Direction ISONIL Maroc',
+      actorEmail: currentUser?.email || 'admin@isonil.com',
+      actorRole: 'admin',
+      targetName: `${targetPending.companyName} (${targetPending.email})`,
+      details:
+        lang === 'ar'
+          ? `اعتماد وتفعيل حساب العميل «${targetPending.companyName}» وإنشاء مشروعه الأولي`
+          : `Approbation et activation du compte client «${targetPending.companyName}»`,
+      severity: 'info',
+    });
   };
 
   // Handler: Admin rejects account
   const handleRejectAccount = (registrationId: string) => {
+    const targetPending = pendingRegistrations.find((p) => p.id === registrationId);
     setPendingRegistrations((prev) => prev.filter((p) => p.id !== registrationId));
     deletePendingRegistrationFromFirestore(registrationId).catch(() => {});
+
+    if (targetPending) {
+      recordAuditLog({
+        category: 'modification',
+        action: 'CLIENT_REJECTED',
+        actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : 'Direction ISONIL Maroc',
+        actorEmail: currentUser?.email || 'admin@isonil.com',
+        actorRole: 'admin',
+        targetName: `${targetPending.companyName} (${targetPending.email})`,
+        details:
+          lang === 'ar'
+            ? `رفض طلب فتح حساب للشركة «${targetPending.companyName}»`
+            : `Rejet de la demande d'accès pour «${targetPending.companyName}»`,
+        severity: 'warning',
+      });
+    }
   };
 
   // Handler: Upload/Publish new attachment
@@ -678,6 +768,54 @@ export default function App() {
       targetProjectId: newAttachment.projectId,
     };
     setNotifications((prev) => [notif, ...prev]);
+
+    recordAuditLog({
+      category: 'modification',
+      action: 'ATTACHMENT_UPLOADED',
+      actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : newAttachment.senderName,
+      actorEmail: currentUser?.email || 'contact@isonil.com',
+      actorRole: currentUser?.role || newAttachment.senderType,
+      targetName: newAttachment.fileName,
+      details:
+        lang === 'ar'
+          ? `رفع ونشر المرفق «${newAttachment.title}» ضمن مشروع «${newAttachment.projectName}»`
+          : `Publication du fichier «${newAttachment.title}» dans le projet «${newAttachment.projectName}»`,
+      severity: 'info',
+    });
+  };
+
+  // Handler: Track File Download & increment downloadCount
+  const handleDownloadAttachment = (attachmentId: string) => {
+    const target = attachments.find((a) => a.id === attachmentId);
+    if (!target) return;
+
+    const nextCount = (target.downloadCount || 0) + 1;
+    setAttachments((prev) =>
+      prev.map((att) => {
+        if (att.id === attachmentId) {
+          const updated: Attachment = { ...att, downloadCount: nextCount };
+          const assignedClient = users.find((u) => u.id === updated.clientId);
+          syncAttachmentToFirestore(updated, assignedClient?.email).catch(() => {});
+          return updated;
+        }
+        return att;
+      })
+    );
+
+    const sizeMo = (target.fileSizeBytes / (1024 * 1024)).toFixed(2);
+    recordAuditLog({
+      category: 'download',
+      action: 'FILE_DOWNLOAD',
+      actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : 'Utilisateur Portail',
+      actorEmail: currentUser?.email || 'client@isonil.com',
+      actorRole: currentUser?.role || 'client',
+      targetName: target.fileName,
+      details:
+        lang === 'ar'
+          ? `تنزيل المرفق «${target.title}» (${sizeMo} Mo) من مشروع «${target.projectName}» (إجمالي التنزيلات: ${nextCount})`
+          : `Téléchargement de «${target.title}» (${sizeMo} Mo) — Projet «${target.projectName}» (Total: ${nextCount})`,
+      severity: 'info',
+    });
   };
 
   // Handler: Toggle Star
@@ -779,6 +917,20 @@ export default function App() {
       type: 'system',
     };
     setNotifications((prev) => [notif, ...prev]);
+
+    recordAuditLog({
+      category: 'modification',
+      action: 'ATTACHMENT_DELETED',
+      actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : 'Direction ISONIL Maroc',
+      actorEmail: currentUser?.email || 'admin@isonil.com',
+      actorRole: 'admin',
+      targetName: target.fileName,
+      details:
+        lang === 'ar'
+          ? `حذف نهائي للمرفق «${target.title}» من مشروع «${target.projectName}»`
+          : `Suppression définitive du fichier «${target.title}» du projet «${target.projectName}»`,
+      severity: 'critical',
+    });
   };
 
   // Handler: Admin deletes a project and cleans up related attachments and client assignments
@@ -831,6 +983,20 @@ export default function App() {
       type: 'project',
     };
     setNotifications((prev) => [notif, ...prev]);
+
+    recordAuditLog({
+      category: 'modification',
+      action: 'PROJECT_DELETED',
+      actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : 'Direction ISONIL Maroc',
+      actorEmail: currentUser?.email || 'admin@isonil.com',
+      actorRole: 'admin',
+      targetName: targetProject.name,
+      details:
+        lang === 'ar'
+          ? `حذف المشروع «${targetProject.name}» وإزالة ${relatedAttachments.length} مرفقات مرتبطة به`
+          : `Suppression du projet «${targetProject.name}» et de ${relatedAttachments.length} pièces jointes associées`,
+      severity: 'critical',
+    });
   };
 
   // Handler: Admin deletes a client account along with their projects and attachments
@@ -885,6 +1051,20 @@ export default function App() {
       type: 'account',
     };
     setNotifications((prev) => [notif, ...prev]);
+
+    recordAuditLog({
+      category: 'modification',
+      action: 'CLIENT_DELETED',
+      actorName: currentUser ? `${currentUser.fullName} — ${currentUser.companyName}` : 'Direction ISONIL Maroc',
+      actorEmail: currentUser?.email || 'admin@isonil.com',
+      actorRole: 'admin',
+      targetName: `${targetClient.companyName} (${targetClient.email})`,
+      details:
+        lang === 'ar'
+          ? `حذف حساب العميل «${targetClient.companyName}» مع ${clientProjectsToDelete.length} مشاريع و ${clientAttachmentsToDelete.length} مرفقات`
+          : `Suppression du compte client «${targetClient.companyName}» (${clientProjectsToDelete.length} projets, ${clientAttachmentsToDelete.length} fichiers)`,
+      severity: 'critical',
+    });
   };
 
 
@@ -977,6 +1157,20 @@ export default function App() {
           targetAttachmentId: attachmentId,
         };
         setNotifications((prev) => [newNotif, ...prev]);
+
+        recordAuditLog({
+          category: 'modification',
+          action: 'ATTACHMENT_FORWARDED',
+          actorName: `${currentUser.fullName} — ${currentUser.companyName}`,
+          actorEmail: currentUser.email,
+          actorRole: currentUser.role,
+          targetName: targetAtt.fileName,
+          details:
+            lang === 'ar'
+              ? `إعادة توجيه المرفق «${targetAtt.title}» عبر البريد الإلكتروني إلى: ${email}`
+              : `Transfert par e-mail de «${targetAtt.title}» vers: ${email}`,
+          severity: 'info',
+        });
 
         return {
           success: true,
@@ -1209,6 +1403,7 @@ export default function App() {
                 onRestoreBackup={handleRestoreBackup}
                 showAdminLinkOnClient={showAdminLinkOnClient}
                 onToggleShowAdminLink={handleToggleShowAdminLink}
+                auditLogs={auditLogs}
               />
             ) : (
               <MailboxWorkspace
@@ -1262,6 +1457,7 @@ export default function App() {
           onClose={() => setSelectedAttachmentForViewer(null)}
           onForward={handleForwardAttachment}
           onDelete={handleDeleteAttachment}
+          onDownload={handleDownloadAttachment}
         />
       )}
 

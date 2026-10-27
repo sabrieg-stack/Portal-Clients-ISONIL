@@ -31,9 +31,13 @@ import {
   Trash2,
   Eye,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  PieChart,
+  LogIn,
+  Activity,
+  Database
 } from 'lucide-react';
-import { Attachment, AttachmentCategory, Language, PendingRegistration, Project, ProjectCategory, User, BackupSnapshot } from '../types';
+import { Attachment, AttachmentCategory, Language, PendingRegistration, Project, ProjectCategory, User, BackupSnapshot, AuditLogEntry, AuditLogCategory } from '../types';
 import { translations } from '../i18n/translations';
 
 interface AdminDashboardProps {
@@ -56,6 +60,7 @@ interface AdminDashboardProps {
   onImportBackup?: (jsonStr: string) => void;
   showAdminLinkOnClient?: boolean;
   onToggleShowAdminLink?: (show: boolean) => void;
+  auditLogs?: AuditLogEntry[];
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -77,10 +82,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRestoreBackup,
   showAdminLinkOnClient = false,
   onToggleShowAdminLink,
+  auditLogs = [],
 }) => {
   const t = translations[lang];
 
-  type AdminTab = 'projects' | 'pending' | 'dispatch' | 'clients' | 'backups' | 'settings';
+  type AdminTab = 'projects' | 'pending' | 'dispatch' | 'clients' | 'backups' | 'audit' | 'settings';
   const [activeTab, setActiveTab] = useState<AdminTab>(projects.length === 0 ? 'projects' : 'pending');
   const [copiedAdminUrl, setCopiedAdminUrl] = useState(false);
 
@@ -163,6 +169,162 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
     return `${(totalStorageBytes / (1024 * 1024)).toFixed(2)} Mo`;
   }, [totalStorageBytes]);
+
+  // Attachment Analytics State & Distribution (PDF vs Images)
+  const [hoveredAnalyticsSlice, setHoveredAnalyticsSlice] = useState<'pdf' | 'image' | null>(null);
+  const [analyticsProjectFilter, setAnalyticsProjectFilter] = useState<string>('all');
+
+  const attachmentAnalytics = useMemo(() => {
+    const activeAttachments = attachments.filter((att) => {
+      if (att.folder === 'trash') return false;
+      if (analyticsProjectFilter !== 'all' && att.projectId !== analyticsProjectFilter) return false;
+      return true;
+    });
+
+    const pdfFiles = activeAttachments.filter(
+      (att) =>
+        att.previewType === 'pdf' ||
+        att.category === 'document' ||
+        /\.pdf$/i.test(att.fileName)
+    );
+
+    const imageFiles = activeAttachments.filter(
+      (att) =>
+        !pdfFiles.some((p) => p.id === att.id) &&
+        (att.previewType === 'image' ||
+          att.category === 'photo' ||
+          /\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(att.fileName))
+    );
+
+    const pdfCount = pdfFiles.length;
+    const imageCount = imageFiles.length;
+    const totalCompared = pdfCount + imageCount;
+
+    const pdfPercent = totalCompared > 0 ? Math.round((pdfCount / totalCompared) * 100) : 0;
+    const imagePercent = totalCompared > 0 ? 100 - pdfPercent : 0;
+
+    const pdfBytes = pdfFiles.reduce((acc, item) => acc + (item.fileSizeBytes || 0), 0);
+    const imageBytes = imageFiles.reduce((acc, item) => acc + (item.fileSizeBytes || 0), 0);
+
+    const formatBytes = (bytes: number) => {
+      if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} Mo`;
+      if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+      return `${bytes} o`;
+    };
+
+    // SVG Pie Chart geometry helper (center 100,100, radius 82)
+    const createPieSlicePath = (startAngleDeg: number, endAngleDeg: number, radius = 82) => {
+      const cx = 100;
+      const cy = 100;
+      const clampedSpan = Math.min(Math.max(endAngleDeg - startAngleDeg, 0), 359.99);
+      const startRad = ((startAngleDeg - 90) * Math.PI) / 180;
+      const endRad = ((startAngleDeg + clampedSpan - 90) * Math.PI) / 180;
+
+      const x1 = cx + radius * Math.cos(startRad);
+      const y1 = cy + radius * Math.sin(startRad);
+      const x2 = cx + radius * Math.cos(endRad);
+      const y2 = cy + radius * Math.sin(endRad);
+      const largeArcFlag = clampedSpan > 180 ? 1 : 0;
+
+      return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+    };
+
+    const pdfAngle = totalCompared > 0 ? (pdfCount / totalCompared) * 360 : 0;
+
+    return {
+      pdfFiles,
+      imageFiles,
+      pdfCount,
+      imageCount,
+      totalCompared,
+      pdfPercent,
+      imagePercent,
+      pdfSizeFormatted: formatBytes(pdfBytes),
+      imageSizeFormatted: formatBytes(imageBytes),
+      totalSizeFormatted: formatBytes(pdfBytes + imageBytes),
+      pdfAngle,
+      pdfSlicePath: pdfCount > 0 && imageCount > 0 ? createPieSlicePath(0, pdfAngle) : '',
+      imageSlicePath: pdfCount > 0 && imageCount > 0 ? createPieSlicePath(pdfAngle, 360) : '',
+    };
+  }, [attachments, analyticsProjectFilter]);
+
+  // Audit Log State, Filtering & Export
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState<'all' | AuditLogCategory>('all');
+  const [auditSearchQuery, setAuditSearchQuery] = useState('');
+  const [showAllAuditRows, setShowAllAuditRows] = useState(false);
+
+  const auditCounts = useMemo(() => {
+    const login = auditLogs.filter((l) => l.category === 'login').length;
+    const download = auditLogs.filter((l) => l.category === 'download').length;
+    const modification = auditLogs.filter((l) => l.category === 'modification').length;
+    return {
+      total: auditLogs.length,
+      login,
+      download,
+      modification,
+    };
+  }, [auditLogs]);
+
+  const filteredAuditLogs = useMemo(() => {
+    const q = auditSearchQuery.trim().toLowerCase();
+    return auditLogs.filter((entry) => {
+      if (auditCategoryFilter !== 'all' && entry.category !== auditCategoryFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        entry.actorName.toLowerCase().includes(q) ||
+        entry.actorEmail.toLowerCase().includes(q) ||
+        entry.targetName.toLowerCase().includes(q) ||
+        entry.action.toLowerCase().includes(q) ||
+        entry.details.toLowerCase().includes(q)
+      );
+    });
+  }, [auditLogs, auditCategoryFilter, auditSearchQuery]);
+
+  const handleExportAuditLogCsv = () => {
+    const headers = ['Timestamp (ISO)', 'Category', 'Action', 'Actor Name', 'Actor Email', 'Role', 'Target', 'Details'];
+    const escapeCsv = (val: string) => `"${String(val || '').replace(/"/g, '""')}"`;
+    const rows = filteredAuditLogs.map((log) => [
+      escapeCsv(log.timestamp),
+      escapeCsv(log.category),
+      escapeCsv(log.action),
+      escapeCsv(log.actorName),
+      escapeCsv(log.actorEmail),
+      escapeCsv(log.actorRole),
+      escapeCsv(log.targetName),
+      escapeCsv(log.details),
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ISONIL_Audit_Log_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const formatAuditTimestamp = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      const datePart = d.toLocaleDateString(lang === 'ar' ? 'ar-MA' : 'fr-FR', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+      });
+      const timePart = d.toLocaleTimeString(lang === 'ar' ? 'ar-MA' : 'fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      return { datePart, timePart };
+    } catch {
+      return { datePart: iso.slice(0, 10), timePart: iso.slice(11, 19) };
+    }
+  };
 
   // Find target project and client
   const activeTargetProject = projects.find((p) => p.id === targetProjectId) || projects[0];
@@ -359,6 +521,379 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
+      {/* 1.5 ATTACHMENT ANALYTICS SECTION (PDF vs Images Pie Chart) */}
+      <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-5 sm:p-6 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b border-[#79C8E8]/15">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#0B192C] border border-[#DFC57B]/40 flex items-center justify-center text-[#DFC57B] shrink-0">
+              <PieChart className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
+                  {lang === 'ar' ? 'تحليلات المرفقات — Attachment Analytics' : 'Attachment Analytics — Répartition des Fichiers'}
+                </h2>
+                <span className="px-2 py-0.5 rounded-md bg-[#0B192C] border border-[#79C8E8]/30 text-[10px] font-mono text-[#79C8E8]">
+                  PDF vs Images
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {lang === 'ar'
+                  ? 'توزيع أنواع الملفات المرفقة في البوابة (ملفات PDF الهندسية مقابل الصور الميدانية)'
+                  : 'Distribution des types de pièces jointes actives (Documents PDF vs Images de chantier)'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] text-slate-300 font-medium whitespace-nowrap">
+              {lang === 'ar' ? 'نطاق التحليل:' : 'Périmètre :'}
+            </label>
+            <select
+              value={analyticsProjectFilter}
+              onChange={(e) => setAnalyticsProjectFilter(e.target.value)}
+              className="px-3 py-1.5 bg-[#0B192C] border border-[#79C8E8]/30 rounded-xl text-xs text-white focus:outline-none focus:border-[#DFC57B]"
+            >
+              <option value="all">
+                {lang === 'ar' ? `جميع المشاريع (${projects.length})` : `Tous les projets (${projects.length})`}
+              </option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          {/* Interactive SVG Pie Chart */}
+          <div className="lg:col-span-5 flex flex-col items-center justify-center bg-[#0B192C]/70 border border-[#79C8E8]/15 rounded-2xl p-5">
+            <div className="relative w-52 h-52 flex items-center justify-center">
+              <svg
+                viewBox="0 0 200 200"
+                className="w-full h-full drop-shadow-lg overflow-visible"
+                role="img"
+                aria-label="Attachment Analytics Pie Chart: PDF vs Images"
+              >
+                {attachmentAnalytics.totalCompared === 0 ? (
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="82"
+                    fill="none"
+                    stroke="#334155"
+                    strokeWidth="18"
+                    strokeDasharray="6 4"
+                  />
+                ) : attachmentAnalytics.pdfCount > 0 && attachmentAnalytics.imageCount === 0 ? (
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="82"
+                    fill="#DFC57B"
+                    stroke="#0B192C"
+                    strokeWidth="3"
+                    className="transition-transform duration-200 origin-center hover:scale-[1.03] cursor-pointer"
+                    onMouseEnter={() => setHoveredAnalyticsSlice('pdf')}
+                    onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+                  />
+                ) : attachmentAnalytics.imageCount > 0 && attachmentAnalytics.pdfCount === 0 ? (
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="82"
+                    fill="#79C8E8"
+                    stroke="#0B192C"
+                    strokeWidth="3"
+                    className="transition-transform duration-200 origin-center hover:scale-[1.03] cursor-pointer"
+                    onMouseEnter={() => setHoveredAnalyticsSlice('image')}
+                    onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+                  />
+                ) : (
+                  <>
+                    {/* PDF Slice */}
+                    <path
+                      d={attachmentAnalytics.pdfSlicePath}
+                      fill="#DFC57B"
+                      stroke="#0B192C"
+                      strokeWidth="3"
+                      className={`transition-all duration-200 origin-center cursor-pointer ${
+                        hoveredAnalyticsSlice === 'pdf'
+                          ? 'scale-[1.04] opacity-100'
+                          : hoveredAnalyticsSlice === 'image'
+                          ? 'opacity-65'
+                          : 'opacity-95 hover:opacity-100'
+                      }`}
+                      onMouseEnter={() => setHoveredAnalyticsSlice('pdf')}
+                      onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+                    >
+                      <title>{`PDF: ${attachmentAnalytics.pdfCount} (${attachmentAnalytics.pdfPercent}%)`}</title>
+                    </path>
+
+                    {/* Images Slice */}
+                    <path
+                      d={attachmentAnalytics.imageSlicePath}
+                      fill="#79C8E8"
+                      stroke="#0B192C"
+                      strokeWidth="3"
+                      className={`transition-all duration-200 origin-center cursor-pointer ${
+                        hoveredAnalyticsSlice === 'image'
+                          ? 'scale-[1.04] opacity-100'
+                          : hoveredAnalyticsSlice === 'pdf'
+                          ? 'opacity-65'
+                          : 'opacity-95 hover:opacity-100'
+                      }`}
+                      onMouseEnter={() => setHoveredAnalyticsSlice('image')}
+                      onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+                    >
+                      <title>{`Images: ${attachmentAnalytics.imageCount} (${attachmentAnalytics.imagePercent}%)`}</title>
+                    </path>
+                  </>
+                )}
+
+                {/* Inner Donut Cutout for Clean Executive Readout */}
+                <circle
+                  cx="100"
+                  cy="100"
+                  r="44"
+                  fill="#0B192C"
+                  stroke="rgba(121, 200, 232, 0.25)"
+                  strokeWidth="2"
+                />
+              </svg>
+
+              {/* Center Dynamic Readout */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
+                {hoveredAnalyticsSlice === 'pdf' ? (
+                  <>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#DFC57B]">PDF</span>
+                    <span className="text-xl font-black text-white font-mono">
+                      {attachmentAnalytics.pdfPercent}%
+                    </span>
+                    <span className="text-[10px] text-slate-300 font-mono">
+                      {attachmentAnalytics.pdfCount} {lang === 'ar' ? 'ملف' : 'fichiers'}
+                    </span>
+                  </>
+                ) : hoveredAnalyticsSlice === 'image' ? (
+                  <>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#79C8E8]">
+                      {lang === 'ar' ? 'صور' : 'Images'}
+                    </span>
+                    <span className="text-xl font-black text-white font-mono">
+                      {attachmentAnalytics.imagePercent}%
+                    </span>
+                    <span className="text-[10px] text-slate-300 font-mono">
+                      {attachmentAnalytics.imageCount} {lang === 'ar' ? 'صورة' : 'fichiers'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-semibold text-slate-400">
+                      {lang === 'ar' ? 'الإجمالي' : 'Total'}
+                    </span>
+                    <span className="text-xl font-black text-white font-mono">
+                      {attachmentAnalytics.totalCompared}
+                    </span>
+                    <span className="text-[10px] text-[#A9DDF1] font-mono">
+                      {attachmentAnalytics.totalSizeFormatted}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Interactive Legend Pills */}
+            <div className="flex items-center justify-center gap-4 mt-4 flex-wrap">
+              <button
+                type="button"
+                onMouseEnter={() => setHoveredAnalyticsSlice('pdf')}
+                onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer ${
+                  hoveredAnalyticsSlice === 'pdf'
+                    ? 'bg-[#DFC57B]/20 border-[#DFC57B] text-white'
+                    : 'bg-[#112239] border-[#DFC57B]/30 text-slate-200'
+                }`}
+              >
+                <span className="w-3 h-3 rounded-sm bg-[#DFC57B] inline-block shrink-0" />
+                <span className="font-bold">PDF</span>
+                <span className="font-mono text-[#DFC57B] font-bold">
+                  {attachmentAnalytics.pdfPercent}% ({attachmentAnalytics.pdfCount})
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onMouseEnter={() => setHoveredAnalyticsSlice('image')}
+                onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs transition-all cursor-pointer ${
+                  hoveredAnalyticsSlice === 'image'
+                    ? 'bg-[#79C8E8]/20 border-[#79C8E8] text-white'
+                    : 'bg-[#112239] border-[#79C8E8]/30 text-slate-200'
+                }`}
+              >
+                <span className="w-3 h-3 rounded-sm bg-[#79C8E8] inline-block shrink-0" />
+                <span className="font-bold">{lang === 'ar' ? 'الصور (Images)' : 'Images'}</span>
+                <span className="font-mono text-[#79C8E8] font-bold">
+                  {attachmentAnalytics.imagePercent}% ({attachmentAnalytics.imageCount})
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Detailed PDF vs Images Breakdown Cards */}
+          <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* PDF Documents Card */}
+            <div
+              onMouseEnter={() => setHoveredAnalyticsSlice('pdf')}
+              onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+              className={`bg-[#0B192C] border rounded-2xl p-4 transition-all ${
+                hoveredAnalyticsSlice === 'pdf'
+                  ? 'border-[#DFC57B] shadow-lg shadow-[#DFC57B]/10'
+                  : 'border-[#DFC57B]/30'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#DFC57B]/15 border border-[#DFC57B]/40 flex items-center justify-center text-[#DFC57B]">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-extrabold text-white">
+                      {lang === 'ar' ? 'ملفات ومستندات PDF' : 'Documents PDF'}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {lang === 'ar' ? 'التقارير، المخططات، والشهادات' : 'Rapports, plans & devis'}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-[#DFC57B]/15 text-[#DFC57B] font-mono text-xs font-black">
+                  {attachmentAnalytics.pdfPercent}%
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between mb-2">
+                <div>
+                  <span className="text-2xl font-black text-white font-mono">
+                    {attachmentAnalytics.pdfCount}
+                  </span>
+                  <span className="text-xs text-slate-300 ms-1.5">
+                    {lang === 'ar' ? 'ملف PDF' : 'fichiers PDF'}
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-[#DFC57B] font-semibold">
+                  {attachmentAnalytics.pdfSizeFormatted}
+                </span>
+              </div>
+
+              <div className="w-full h-2 rounded-full bg-[#112239] overflow-hidden mb-3">
+                <div
+                  className="h-full bg-[#DFC57B] rounded-full transition-all duration-500"
+                  style={{ width: `${attachmentAnalytics.pdfPercent}%` }}
+                />
+              </div>
+
+              {attachmentAnalytics.pdfFiles.length > 0 ? (
+                <div className="space-y-1.5 pt-2 border-t border-white/10">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase">
+                    {lang === 'ar' ? 'أحدث ملفات PDF:' : 'Derniers fichiers PDF :'}
+                  </p>
+                  {attachmentAnalytics.pdfFiles.slice(0, 2).map((att) => (
+                    <button
+                      key={att.id}
+                      type="button"
+                      onClick={() => onOpenViewer(att)}
+                      className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[#112239]/80 hover:bg-[#112239] text-start text-[11px] text-slate-200 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <span className="truncate font-medium">{att.title}</span>
+                      <Eye className="w-3.5 h-3.5 text-[#DFC57B] shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 pt-2 border-t border-white/10">
+                  {lang === 'ar' ? 'لا توجد ملفات PDF حالياً' : 'Aucun document PDF'}
+                </p>
+              )}
+            </div>
+
+            {/* Images Card */}
+            <div
+              onMouseEnter={() => setHoveredAnalyticsSlice('image')}
+              onMouseLeave={() => setHoveredAnalyticsSlice(null)}
+              className={`bg-[#0B192C] border rounded-2xl p-4 transition-all ${
+                hoveredAnalyticsSlice === 'image'
+                  ? 'border-[#79C8E8] shadow-lg shadow-[#79C8E8]/10'
+                  : 'border-[#79C8E8]/30'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#79C8E8]/15 border border-[#79C8E8]/40 flex items-center justify-center text-[#79C8E8]">
+                    <ImageIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-extrabold text-white">
+                      {lang === 'ar' ? 'الصور الفوتوغرافية (Images)' : 'Images & Photos'}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {lang === 'ar' ? 'توثيق الأوراش والعزل الحراري' : 'Suivi visuel & chantiers'}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-lg bg-[#79C8E8]/15 text-[#79C8E8] font-mono text-xs font-black">
+                  {attachmentAnalytics.imagePercent}%
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between mb-2">
+                <div>
+                  <span className="text-2xl font-black text-white font-mono">
+                    {attachmentAnalytics.imageCount}
+                  </span>
+                  <span className="text-xs text-slate-300 ms-1.5">
+                    {lang === 'ar' ? 'صورة مرفقة' : 'fichiers image'}
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-[#79C8E8] font-semibold">
+                  {attachmentAnalytics.imageSizeFormatted}
+                </span>
+              </div>
+
+              <div className="w-full h-2 rounded-full bg-[#112239] overflow-hidden mb-3">
+                <div
+                  className="h-full bg-[#79C8E8] rounded-full transition-all duration-500"
+                  style={{ width: `${attachmentAnalytics.imagePercent}%` }}
+                />
+              </div>
+
+              {attachmentAnalytics.imageFiles.length > 0 ? (
+                <div className="space-y-1.5 pt-2 border-t border-white/10">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase">
+                    {lang === 'ar' ? 'أحدث الصور المرفقة:' : 'Dernières images :'}
+                  </p>
+                  {attachmentAnalytics.imageFiles.slice(0, 2).map((att) => (
+                    <button
+                      key={att.id}
+                      type="button"
+                      onClick={() => onOpenViewer(att)}
+                      className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[#112239]/80 hover:bg-[#112239] text-start text-[11px] text-slate-200 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <span className="truncate font-medium">{att.title}</span>
+                      <Eye className="w-3.5 h-3.5 text-[#79C8E8] shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 pt-2 border-t border-white/10">
+                  {lang === 'ar' ? 'لا توجد صور مرفقة حالياً' : 'Aucune image'}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 2. ADMIN NAVIGATION TABS */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#112239] border border-[#79C8E8]/25 rounded-2xl">
         <button
@@ -436,6 +971,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('audit')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+            activeTab === 'audit'
+              ? 'bg-[#DFC57B] text-[#0B192C] font-bold shadow-md'
+              : 'text-slate-200 hover:bg-[#162942] hover:text-white'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>{lang === 'ar' ? 'سجل التدقيق الأمني (Audit Log)' : 'Audit Log & Sécurité'}</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-black/20 text-[10px] font-mono">
+            {auditLogs.length}
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('settings')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
             activeTab === 'settings'
@@ -446,6 +996,303 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <Settings className="w-4 h-4" />
           <span>{lang === 'ar' ? 'إعدادات مسار الإدارة' : 'Paramètres d\'Accès'}</span>
         </button>
+      </div>
+
+      {/* AUDIT LOG SECTION (Always visible when 'audit' tab is active, and shown as a live security monitor in the dashboard) */}
+      <div className="bg-[#112239] border border-[#79C8E8]/25 rounded-2xl p-5 sm:p-6 shadow-xl">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 mb-5 border-b border-[#79C8E8]/15">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#0B192C] border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
+                  {lang === 'ar' ? 'سجل التدقيق الأمني — Audit Log' : 'Audit Log — Surveillance & Sécurité'}
+                </h2>
+                <span className="px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-700/60 text-[10px] font-mono text-emerald-400">
+                  {lang === 'ar' ? 'مراقبة فورية' : 'Monitoring Actif'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {lang === 'ar'
+                  ? 'تتبع دقيق لعمليات تسجيل دخول المستخدمين، تنزيل الملفات، والتوقيت الزمني لتعديل أو حذف البيانات'
+                  : 'Traçabilité horodatée des connexions utilisateurs, téléchargements de fichiers et modifications de données'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
+              <input
+                type="text"
+                value={auditSearchQuery}
+                onChange={(e) => setAuditSearchQuery(e.target.value)}
+                placeholder={lang === 'ar' ? 'بحث بالمستخدم أو الملف أو الحدث...' : 'Rechercher utilisateur, fichier, action...'}
+                className="ps-8 pe-3 py-1.5 bg-[#0B192C] border border-[#79C8E8]/30 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-[#DFC57B] w-56 sm:w-64"
+              />
+            </div>
+
+            {/* Export CSV Button */}
+            <button
+              type="button"
+              onClick={handleExportAuditLogCsv}
+              className="px-3 py-1.5 rounded-xl bg-[#0B192C] hover:bg-[#162942] border border-[#DFC57B]/40 text-xs font-bold text-[#DFC57B] flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{lang === 'ar' ? 'تصدير السجل (CSV)' : 'Exporter CSV'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Category Filter Bar + Metric Badges */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+          <button
+            type="button"
+            onClick={() => setAuditCategoryFilter('all')}
+            className={`flex items-center justify-between p-3 rounded-xl border text-start transition-all cursor-pointer ${
+              auditCategoryFilter === 'all'
+                ? 'bg-[#DFC57B]/15 border-[#DFC57B] text-white shadow-md'
+                : 'bg-[#0B192C] border-[#79C8E8]/20 text-slate-300 hover:border-[#79C8E8]/40'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Activity className="w-4 h-4 text-[#DFC57B]" />
+              <div>
+                <p className="text-[11px] font-bold text-white">
+                  {lang === 'ar' ? 'جميع الأحداث' : 'Tous les événements'}
+                </p>
+                <p className="text-[10px] text-slate-400">All Events</p>
+              </div>
+            </div>
+            <span className="text-sm font-black font-mono text-[#DFC57B]">{auditCounts.total}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAuditCategoryFilter('login')}
+            className={`flex items-center justify-between p-3 rounded-xl border text-start transition-all cursor-pointer ${
+              auditCategoryFilter === 'login'
+                ? 'bg-emerald-500/15 border-emerald-400 text-white shadow-md'
+                : 'bg-[#0B192C] border-[#79C8E8]/20 text-slate-300 hover:border-emerald-500/40'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <LogIn className="w-4 h-4 text-emerald-400" />
+              <div>
+                <p className="text-[11px] font-bold text-white">
+                  {lang === 'ar' ? 'تسجيلات الدخول' : 'Connexions'}
+                </p>
+                <p className="text-[10px] text-slate-400">User Logins</p>
+              </div>
+            </div>
+            <span className="text-sm font-black font-mono text-emerald-400">{auditCounts.login}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAuditCategoryFilter('download')}
+            className={`flex items-center justify-between p-3 rounded-xl border text-start transition-all cursor-pointer ${
+              auditCategoryFilter === 'download'
+                ? 'bg-[#79C8E8]/15 border-[#79C8E8] text-white shadow-md'
+                : 'bg-[#0B192C] border-[#79C8E8]/20 text-slate-300 hover:border-[#79C8E8]/40'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Download className="w-4 h-4 text-[#79C8E8]" />
+              <div>
+                <p className="text-[11px] font-bold text-white">
+                  {lang === 'ar' ? 'تنزيلات الملفات' : 'Téléchargements'}
+                </p>
+                <p className="text-[10px] text-slate-400">File Downloads</p>
+              </div>
+            </div>
+            <span className="text-sm font-black font-mono text-[#79C8E8]">{auditCounts.download}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAuditCategoryFilter('modification')}
+            className={`flex items-center justify-between p-3 rounded-xl border text-start transition-all cursor-pointer ${
+              auditCategoryFilter === 'modification'
+                ? 'bg-amber-500/15 border-amber-400 text-white shadow-md'
+                : 'bg-[#0B192C] border-[#79C8E8]/20 text-slate-300 hover:border-amber-500/40'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Database className="w-4 h-4 text-amber-400" />
+              <div>
+                <p className="text-[11px] font-bold text-white">
+                  {lang === 'ar' ? 'تعديلات البيانات' : 'Modifications'}
+                </p>
+                <p className="text-[10px] text-slate-400">Data Modifications</p>
+              </div>
+            </div>
+            <span className="text-sm font-black font-mono text-amber-400">{auditCounts.modification}</span>
+          </button>
+        </div>
+
+        {/* Chronological Audit Table */}
+        <div className="overflow-x-auto rounded-xl border border-[#79C8E8]/20 bg-[#0B192C]">
+          <table className="w-full text-start border-collapse">
+            <thead>
+              <tr className="border-b border-[#79C8E8]/20 bg-[#112239]/70 text-[11px] font-bold text-[#A9DDF1]">
+                <th className="py-3 px-4 text-start whitespace-nowrap">
+                  {lang === 'ar' ? 'التوقيت الزمني (Timestamp)' : 'Horodatage (Timestamp)'}
+                </th>
+                <th className="py-3 px-4 text-start whitespace-nowrap">
+                  {lang === 'ar' ? 'النوع والعملية' : 'Catégorie & Action'}
+                </th>
+                <th className="py-3 px-4 text-start whitespace-nowrap">
+                  {lang === 'ar' ? 'المستخدم (Actor)' : 'Utilisateur & Rôle'}
+                </th>
+                <th className="py-3 px-4 text-start whitespace-nowrap">
+                  {lang === 'ar' ? 'العنصر المستهدف' : 'Cible / Ressource'}
+                </th>
+                <th className="py-3 px-4 text-start">
+                  {lang === 'ar' ? 'تفاصيل العملية' : 'Détails de l\'Opération'}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 text-xs">
+              {filteredAuditLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
+                    {lang === 'ar'
+                      ? 'لا توجد سجلات تدقيق مطابقة لمعايير البحث الحالية.'
+                      : 'Aucune entrée d\'audit ne correspond aux critères sélectionnés.'}
+                  </td>
+                </tr>
+              ) : (
+                (activeTab === 'audit' || showAllAuditRows
+                  ? filteredAuditLogs
+                  : filteredAuditLogs.slice(0, 6)
+                ).map((entry) => {
+                  const { datePart, timePart } = formatAuditTimestamp(entry.timestamp);
+                  const isCritical = entry.severity === 'critical' || entry.action.includes('DELETED');
+
+                  return (
+                    <tr
+                      key={entry.id}
+                      className="hover:bg-[#112239]/50 transition-colors"
+                    >
+                      {/* Timestamp */}
+                      <td className="py-3 px-4 whitespace-nowrap align-top">
+                        <div className="flex flex-col font-mono">
+                          <span className="text-white font-bold text-[11px]">{datePart}</span>
+                          <span className="text-[10px] text-[#79C8E8]">{timePart}</span>
+                        </div>
+                      </td>
+
+                      {/* Category & Action Badge */}
+                      <td className="py-3 px-4 whitespace-nowrap align-top">
+                        <div className="flex flex-col items-start gap-1">
+                          {entry.category === 'login' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-950/90 border border-emerald-700/60 text-emerald-300 text-[10px] font-bold">
+                              <LogIn className="w-3 h-3" />
+                              <span>{lang === 'ar' ? 'تسجيل دخول' : 'Connexion'}</span>
+                            </span>
+                          ) : entry.category === 'download' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-sky-950/90 border border-[#79C8E8]/50 text-[#79C8E8] text-[10px] font-bold">
+                              <Download className="w-3 h-3" />
+                              <span>{lang === 'ar' ? 'تنزيل ملف' : 'Téléchargement'}</span>
+                            </span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border text-[10px] font-bold ${
+                                isCritical
+                                  ? 'bg-red-950/90 border-red-700/60 text-red-300'
+                                  : 'bg-amber-950/80 border-amber-700/60 text-[#DFC57B]'
+                              }`}
+                            >
+                              <Database className="w-3 h-3" />
+                              <span>
+                                {isCritical
+                                  ? lang === 'ar'
+                                    ? 'حذف بيانات'
+                                    : 'Suppression'
+                                  : lang === 'ar'
+                                  ? 'تعديل بيانات'
+                                  : 'Modification'}
+                              </span>
+                            </span>
+                          )}
+                          <span className="text-[10px] font-mono text-slate-400">{entry.action}</span>
+                        </div>
+                      </td>
+
+                      {/* Actor */}
+                      <td className="py-3 px-4 whitespace-nowrap align-top">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white text-xs">{entry.actorName}</span>
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                                entry.actorRole === 'admin'
+                                  ? 'bg-[#DFC57B]/20 text-[#DFC57B] border border-[#DFC57B]/40'
+                                  : 'bg-[#79C8E8]/15 text-[#79C8E8] border border-[#79C8E8]/30'
+                              }`}
+                            >
+                              {entry.actorRole === 'admin'
+                                ? lang === 'ar'
+                                  ? 'إدارة'
+                                  : 'Admin'
+                                : lang === 'ar'
+                                ? 'عميل'
+                                : 'Client'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-mono text-slate-400">{entry.actorEmail}</span>
+                        </div>
+                      </td>
+
+                      {/* Target Resource */}
+                      <td className="py-3 px-4 align-top max-w-[220px]">
+                        <span className="font-mono text-[11px] text-[#A9DDF1] font-semibold break-all">
+                          {entry.targetName}
+                        </span>
+                      </td>
+
+                      {/* Modification / Event Details */}
+                      <td className="py-3 px-4 align-top text-slate-200 leading-relaxed min-w-[240px]">
+                        {entry.details}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Show More / Show Less Toggle when more than 6 logs exist */}
+        {filteredAuditLogs.length > 6 && activeTab !== 'audit' && (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowAllAuditRows((prev) => !prev)}
+              className="px-4 py-1.5 rounded-xl bg-[#0B192C] hover:bg-[#162942] border border-[#79C8E8]/30 text-xs font-semibold text-[#79C8E8] flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              {showAllAuditRows ? (
+                <>
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'عرض أحدث 6 أحداث فقط' : 'Afficher uniquement les 6 derniers'}</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>
+                    {lang === 'ar'
+                      ? `عرض السجل الكامل (${filteredAuditLogs.length} حدثاً)`
+                      : `Afficher tout le journal (${filteredAuditLogs.length} entrées)`}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* TAB 1: PROJECTS MANAGEMENT */}

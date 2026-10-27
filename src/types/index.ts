@@ -105,3 +105,19 @@ export interface BackupSnapshot {
   note?: string;
   payloadJson: string;
 }
+
+export type AuditLogCategory = 'login' | 'download' | 'modification';
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  category: AuditLogCategory;
+  action: string;
+  actorName: string;
+  actorEmail: string;
+  actorRole: UserRole;
+  targetName: string;
+  details: string;
+  severity?: 'info' | 'warning' | 'critical';
+}
+
