@@ -15,7 +15,7 @@
   }
 
   body {
-    background-color: #0B192C;
+    background-color: #151921;
     color: #FFFFFF;
     overflow-x: hidden;
   }
@@ -77,12 +77,12 @@ html[data-theme="petroleum-green"] {
   --theme-text-contrast: #0E433D;
 }
 
-/* 4. ISONIL Original — الهوية الأصلية */
+/* 4. ISONIL Original — الهوية الأصلية (الفحمي الداكن بطيف أزرق خفيف جداً) */
 html[data-theme="isonil-original"], :root {
-  --bg-main: #0B192C;
-  --bg-surface: #112239;
-  --bg-subtle: #071220;
-  --bg-hover: #162942;
+  --bg-main: #151921;
+  --bg-surface: #1D222B;
+  --bg-subtle: #101319;
+  --bg-hover: #252C37;
   --text-main: #FFFFFF;
   --text-muted: #94A3B8;
   --text-headings: #DFC57B;
@@ -92,7 +92,7 @@ html[data-theme="isonil-original"], :root {
   --theme-accent-hover: #d4b663;
   --theme-accent-glow: rgba(223, 197, 123, 0.22);
   --theme-accent-border: rgba(121, 200, 232, 0.45);
-  --theme-text-contrast: #0B192C;
+  --theme-text-contrast: #151921;
 }
 
 /* Icon Size Scaling Rules */
@@ -230,6 +230,80 @@ html[data-theme="petroleum-green"] .hover\:bg-\[\#162942\]\/80:hover {
   background-color: var(--bg-hover) !important;
 }
 
+/* ISONIL Original Mappings — الفحمي الداكن بطيف أزرق خفيف جداً */
+html[data-theme="isonil-original"] body,
+html:not([data-theme]) body {
+  background-color: #151921 !important;
+}
+html[data-theme="isonil-original"] .bg-\[\#0B192C\],
+html:not([data-theme]) .bg-\[\#0B192C\] {
+  background-color: #151921 !important;
+}
+html[data-theme="isonil-original"] .bg-\[\#0B192C\]\/95,
+html[data-theme="isonil-original"] .bg-\[\#0B192C\]\/90,
+html:not([data-theme]) .bg-\[\#0B192C\]\/95,
+html:not([data-theme]) .bg-\[\#0B192C\]\/90 {
+  background-color: rgba(21, 25, 33, 0.96) !important;
+}
+html[data-theme="isonil-original"] .bg-\[\#0B192C\]\/80,
+html[data-theme="isonil-original"] .bg-\[\#0B192C\]\/70,
+html[data-theme="isonil-original"] .bg-\[\#0B192C\]\/60,
+html[data-theme="isonil-original"] .bg-\[\#0B192C\]\/50,
+html[data-theme="isonil-original"] .bg-\[\#0B192C\]\/40,
+html:not([data-theme]) .bg-\[\#0B192C\]\/80,
+html:not([data-theme]) .bg-\[\#0B192C\]\/70,
+html:not([data-theme]) .bg-\[\#0B192C\]\/60,
+html:not([data-theme]) .bg-\[\#0B192C\]\/50,
+html:not([data-theme]) .bg-\[\#0B192C\]\/40 {
+  background-color: rgba(21, 25, 33, 0.72) !important;
+}
+html[data-theme="isonil-original"] .bg-\[\#112239\],
+html:not([data-theme]) .bg-\[\#112239\] {
+  background-color: #1D222B !important;
+}
+html[data-theme="isonil-original"] .bg-\[\#112239\]\/95,
+html[data-theme="isonil-original"] .bg-\[\#112239\]\/90,
+html[data-theme="isonil-original"] .bg-\[\#112239\]\/80,
+html[data-theme="isonil-original"] .bg-\[\#112239\]\/60,
+html:not([data-theme]) .bg-\[\#112239\]\/95,
+html:not([data-theme]) .bg-\[\#112239\]\/90,
+html:not([data-theme]) .bg-\[\#112239\]\/80,
+html:not([data-theme]) .bg-\[\#112239\]\/60 {
+  background-color: rgba(29, 34, 43, 0.9) !important;
+}
+html[data-theme="isonil-original"] .bg-\[\#162942\],
+html:not([data-theme]) .bg-\[\#162942\] {
+  background-color: #252C37 !important;
+}
+html[data-theme="isonil-original"] .bg-\[\#162942\]\/80,
+html[data-theme="isonil-original"] .bg-\[\#162942\]\/70,
+html[data-theme="isonil-original"] .bg-\[\#162942\]\/60,
+html[data-theme="isonil-original"] .bg-\[\#162942\]\/50,
+html:not([data-theme]) .bg-\[\#162942\]\/80,
+html:not([data-theme]) .bg-\[\#162942\]\/70,
+html:not([data-theme]) .bg-\[\#162942\]\/60,
+html:not([data-theme]) .bg-\[\#162942\]\/50 {
+  background-color: rgba(37, 44, 55, 0.78) !important;
+}
+html[data-theme="isonil-original"] header,
+html:not([data-theme]) header {
+  background-color: rgba(21, 25, 33, 0.96) !important;
+}
+html[data-theme="isonil-original"] footer,
+html:not([data-theme]) footer {
+  background-color: #151921 !important;
+}
+html[data-theme="isonil-original"] .hover\:bg-\[\#162942\]:hover,
+html[data-theme="isonil-original"] .hover\:bg-\[\#162942\]\/80:hover,
+html:not([data-theme]) .hover\:bg-\[\#162942\]:hover,
+html:not([data-theme]) .hover\:bg-\[\#162942\]\/80:hover {
+  background-color: #252C37 !important;
+}
+html[data-theme="isonil-original"] .hover\:bg-\[\#1f3758\]:hover,
+html:not([data-theme]) .hover\:bg-\[\#1f3758\]:hover {
+  background-color: #2E3644 !important;
+}
+
 /* Dynamic theme helper classes */
 .theme-btn {
   background-color: var(--theme-accent) !important;
@@ -277,7 +351,7 @@ html[data-theme="petroleum-green"] .hover\:bg-\[\#162942\]\/80:hover {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(11, 25, 44, 0.9);
+  background: rgba(21, 25, 33, 0.9);
 }
 
 ::-webkit-scrollbar-thumb {

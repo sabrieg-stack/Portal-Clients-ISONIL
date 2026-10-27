@@ -33,7 +33,7 @@ export const CinematicWelcome: React.FC<CinematicWelcomeProps> = ({
   const progressPercent = ((3 - secondsLeft) / 3) * 100;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B192C] overflow-hidden select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#151921] overflow-hidden select-none">
       {/* Background professional worker image in ISONIL uniform */}
       <div 
         className="absolute inset-0 bg-cover bg-center transition-transform duration-[3000ms] ease-out scale-105"
@@ -44,8 +44,8 @@ export const CinematicWelcome: React.FC<CinematicWelcomeProps> = ({
       />
 
       {/* Subtle translucent visual treatment */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0B192C] via-[#0B192C]/70 to-[#0B192C]/85" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#0B192C]/45 to-[#0B192C]/95" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#151921] via-[#151921]/70 to-[#151921]/85" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#151921]/45 to-[#151921]/95" />
 
       {/* Top Bar with Official ISONIL Logo, Language Switcher, and Skip Button */}
       <div className="absolute top-0 left-0 right-0 p-5 md:p-8 flex items-center justify-between z-20">

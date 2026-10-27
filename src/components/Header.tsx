@@ -105,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'white', label: t.themeWhite, color: '#FFFFFF', border: '#CBD5E1' },
     { id: 'charcoal-navy', label: t.themeCharcoalNavy, color: '#26313A' },
     { id: 'petroleum-green', label: t.themePetroleumGreen, color: '#14564F' },
-    { id: 'isonil-original', label: t.themeIsonilOriginal, color: '#0B192C' },
+    { id: 'isonil-original', label: t.themeIsonilOriginal, color: '#151921' },
   ];
 
   const activeThemeObj = themeOptions.find((o) => o.id === themeColor) || themeOptions[0];

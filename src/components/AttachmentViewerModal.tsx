@@ -22,7 +22,12 @@ import {
   Sparkles,
   AlertTriangle,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Attachment, Language, Project } from '../types';
 import { translations } from '../i18n/translations';
@@ -71,6 +76,15 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
   const [forwardPreviewUrl, setForwardPreviewUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Document & Image interactive preview states
+  const [imageZoom, setImageZoom] = useState(100);
+  const [imageRotation, setImageRotation] = useState(0);
+  const [docZoom, setDocZoom] = useState(100);
+  const [pdfViewMode, setPdfViewMode] = useState<'embedded' | 'sheet'>('embedded');
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [showForwardInlinePreview, setShowForwardInlinePreview] = useState(true);
+  const [expandForwardPreview, setExpandForwardPreview] = useState(false);
+
   // Video player state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -86,6 +100,54 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
     setSimulatedPlaying(false);
     setCurrentTime(0);
     setShowDeleteConfirm(false);
+    setImageZoom(100);
+    setImageRotation(0);
+    setDocZoom(100);
+    setShowForwardInlinePreview(true);
+    setExpandForwardPreview(false);
+  }, [attachment]);
+
+  // Convert base64 data:application/pdf URLs into Blob URLs for reliable iframe PDF rendering
+  useEffect(() => {
+    if (!attachment?.fileUrl) {
+      setPdfBlobUrl(null);
+      setPdfViewMode('sheet');
+      return;
+    }
+
+    const rawUrl = attachment.fileUrl.trim();
+    const ext = (attachment.fileName.split('.').pop() || '').toLowerCase();
+
+    if (rawUrl.startsWith('data:application/pdf')) {
+      try {
+        const commaIndex = rawUrl.indexOf(',');
+        const base64Data = commaIndex !== -1 ? rawUrl.slice(commaIndex + 1) : '';
+        const binaryString = window.atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const objectUrl = URL.createObjectURL(blob);
+        setPdfBlobUrl(objectUrl);
+        setPdfViewMode('embedded');
+        return () => {
+          URL.revokeObjectURL(objectUrl);
+        };
+      } catch {
+        setPdfBlobUrl(null);
+        setPdfViewMode('sheet');
+      }
+    } else if (
+      rawUrl.toLowerCase().endsWith('.pdf') ||
+      (rawUrl.startsWith('blob:') && ext === 'pdf')
+    ) {
+      setPdfBlobUrl(rawUrl);
+      setPdfViewMode('embedded');
+    } else {
+      setPdfBlobUrl(null);
+      setPdfViewMode('sheet');
+    }
   }, [attachment]);
 
   useEffect(() => {
@@ -124,6 +186,19 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
   const isVideoFormat = 
     attachment.category === 'video' || 
     ['mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv', 'flv', 'm4v', '3gp'].includes(fileExt);
+
+  const isImageFormat =
+    !isVideoFormat &&
+    (attachment.category === 'photo' ||
+      ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp'].includes(fileExt) ||
+      normalizedFileUrl.startsWith('data:image/'));
+
+  const isPdfOrDocumentFormat =
+    !isVideoFormat &&
+    !isImageFormat &&
+    (attachment.category === 'document' ||
+      fileExt === 'pdf' ||
+      normalizedFileUrl.startsWith('data:application/pdf'));
 
   // Real file download handler
   const handleDownload = () => {
@@ -199,7 +274,42 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
 
   const handleForwardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forwardEmail || isForwarding) return;
+    if (isForwarding) return;
+
+    const trimmedInput = forwardEmail.trim();
+    if (!trimmedInput) {
+      setForwardError(
+        lang === 'ar'
+          ? 'يرجى إدخال عنوان البريد الإلكتروني للمستلم.'
+          : 'Veuillez saisir une adresse e-mail destinataire.'
+      );
+      return;
+    }
+
+    const emailParts = trimmedInput
+      .split(/[,;]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    const invalidParts = emailParts.filter((part) => !emailRegex.test(part));
+
+    if (emailParts.length === 0 || invalidParts.length > 0) {
+      setForwardError(
+        lang === 'ar'
+          ? `صيغة البريد الإلكتروني غير صحيحة${invalidParts.length ? ` (${invalidParts.join(', ')})` : ''}. يرجى التحقق من العنوان قبل الإرسال.`
+          : `Format d'adresse e-mail invalide${invalidParts.length ? ` (${invalidParts.join(', ')})` : ''}.`
+      );
+      return;
+    }
+
+    if (!onForward) {
+      setForwardError(
+        lang === 'ar'
+          ? 'خدمة إرسال البريد الإلكتروني غير متصلة.'
+          : 'Service de messagerie non connecté.'
+      );
+      return;
+    }
 
     setIsForwarding(true);
     setForwardError(null);
@@ -207,18 +317,13 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
     setForwardPreviewUrl(null);
 
     try {
-      if (onForward) {
-        const result = await onForward(attachment.id, forwardEmail, forwardNote);
-        if (result && !result.success) {
-          setForwardError(result.message || t.forwardError);
-          setIsForwarding(false);
-          return;
-        }
-        if (result && result.success) {
-          setForwardReceiptId(result.messageId || null);
-          setForwardPreviewUrl(result.previewUrl || null);
-        }
+      const result = await onForward(attachment.id, emailParts.join(', '), forwardNote);
+      if (!result || !result.success) {
+        setForwardError(result?.message || t.forwardError);
+        return;
       }
+      setForwardReceiptId(result.messageId || null);
+      setForwardPreviewUrl(result.previewUrl || null);
       setForwardSuccess(true);
     } catch (err: any) {
       setForwardError(err?.message || t.forwardError);
@@ -401,18 +506,89 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
             </div>
           </div>
 
-          {/* Photo Preview */}
-          {attachment.category === 'photo' && !isVideoFormat && (
-            <div className="flex flex-col items-center justify-center">
-              <div className="relative max-h-[60vh] w-full rounded-2xl overflow-hidden border border-[#79C8E8]/30 bg-black flex items-center justify-center shadow-xl">
+          {/* Photo / Image Interactive Preview */}
+          {isImageFormat && (
+            <div className="flex flex-col items-center justify-center w-full max-w-4xl mx-auto">
+              {/* Interactive Image Preview Toolbar */}
+              <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-3 px-3 py-2 rounded-xl bg-[#112239] border border-[#79C8E8]/25 text-xs">
+                <div className="flex items-center gap-2 text-slate-200">
+                  <ImageIcon className="w-4 h-4 text-[#DFC57B]" />
+                  <span className="font-semibold text-white">
+                    {lang === 'ar' ? 'معاينة الصورة قبل الإرسال' : "Aperçu de l'image avant transfert"}
+                  </span>
+                  <span className="text-slate-400" aria-hidden="true">·</span>
+                  <span className="font-mono text-[#A9DDF1]">{attachment.fileName}</span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setImageZoom((z) => Math.max(50, z - 25))}
+                    className="p-1.5 rounded-lg bg-[#162942] hover:bg-[#1f3758] text-slate-200 transition-colors cursor-pointer"
+                    title={lang === 'ar' ? 'تصغير' : 'Zoom arrière'}
+                  >
+                    <ZoomOut className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageZoom(100);
+                      setImageRotation(0);
+                    }}
+                    className="px-2 py-1 rounded-lg bg-[#0B192C] border border-[#79C8E8]/25 text-[#DFC57B] font-mono text-[11px] cursor-pointer"
+                    title={lang === 'ar' ? 'إعادة الضبط' : 'Réinitialiser'}
+                  >
+                    {imageZoom}%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImageZoom((z) => Math.min(250, z + 25))}
+                    className="p-1.5 rounded-lg bg-[#162942] hover:bg-[#1f3758] text-slate-200 transition-colors cursor-pointer"
+                    title={lang === 'ar' ? 'تكبير' : 'Zoom avant'}
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImageRotation((r) => (r + 90) % 360)}
+                    className="p-1.5 rounded-lg bg-[#162942] hover:bg-[#1f3758] text-slate-200 transition-colors cursor-pointer"
+                    title={lang === 'ar' ? 'تدوير 90°' : 'Pivoter 90°'}
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+
+                  {onForward && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForwardModal(true);
+                        setForwardError(null);
+                        setForwardSuccess(false);
+                      }}
+                      className="ms-1 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#DFC57B] hover:bg-[#d4b663] text-[#0B192C] font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      <Forward className={`w-3.5 h-3.5 ${lang === 'ar' ? 'rotate-180' : ''}`} />
+                      <span>{lang === 'ar' ? 'إعادة توجيه الصورة' : "Transférer l'image"}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="relative max-h-[62vh] min-h-[280px] w-full rounded-2xl overflow-auto border border-[#79C8E8]/30 bg-black/90 flex items-center justify-center shadow-xl p-4">
                 <img 
                   src={normalizedFileUrl}
                   alt={attachment.title}
-                  className="max-h-[60vh] w-auto max-w-full object-contain"
+                  style={{
+                    transform: `scale(${imageZoom / 100}) rotate(${imageRotation}deg)`,
+                    transformOrigin: 'center center',
+                  }}
+                  className="max-h-[56vh] w-auto max-w-full object-contain transition-transform duration-200"
                 />
               </div>
-              <div className="mt-3 text-xs text-[#A9DDF1] text-center font-mono">
-                {attachment.fileName}
+              <div className="mt-3 flex items-center justify-center gap-2 text-xs text-[#A9DDF1] text-center font-mono">
+                <span>{attachment.fileName}</span>
+                <span aria-hidden="true">·</span>
+                <span>{formatBytes(attachment.fileSizeBytes)}</span>
               </div>
             </div>
           )}
@@ -545,58 +721,229 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
             </div>
           )}
 
-          {/* Document / PDF layout */}
-          {attachment.category === 'document' && !isVideoFormat && (
-            <div className="max-w-3xl mx-auto bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-6 shadow-xl">
-              <div className="flex items-center justify-between border-b border-[#79C8E8]/20 pb-4 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#0B192C] border border-[#DFC57B]/40 flex items-center justify-center text-[#DFC57B]">
-                    <FileText className="w-6 h-6" />
+          {/* Document / PDF Interactive Preview & Metadata Layout */}
+          {isPdfOrDocumentFormat && (
+            <div className="max-w-4xl mx-auto space-y-4">
+              {/* Document Metadata & Controls Header */}
+              <div className="bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-5 shadow-xl">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#79C8E8]/20 pb-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#0B192C] border border-[#DFC57B]/40 flex items-center justify-center text-[#DFC57B]">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white text-base">{attachment.fileName}</h4>
+                      <p className="text-xs text-[#A9DDF1]">
+                        {lang === 'ar' ? 'وثيقة تقنية معتمدة — ISONIL Maroc' : 'Document Technique ISONIL Maroc'}
+                        <span className="mx-1.5" aria-hidden="true">·</span>
+                        <span className="font-mono text-[#DFC57B]">ISO-DOC-{attachment.id.toUpperCase()}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Interactive PDF Preview Controls */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {pdfBlobUrl && (
+                      <div className="flex items-center gap-1 p-1 rounded-xl bg-[#0B192C] border border-[#79C8E8]/25">
+                        <button
+                          type="button"
+                          onClick={() => setPdfViewMode('embedded')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                            pdfViewMode === 'embedded'
+                              ? 'bg-[#162942] text-[#DFC57B] font-semibold'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          {lang === 'ar' ? 'عارض PDF المباشر' : 'Lecteur PDF intégré'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPdfViewMode('sheet')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                            pdfViewMode === 'sheet'
+                              ? 'bg-[#162942] text-[#DFC57B] font-semibold'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          {lang === 'ar' ? 'نسخة الوثيقة الرسمية' : 'Fiche Document A4'}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setDocZoom((z) => Math.max(75, z - 15))}
+                        className="p-1.5 rounded-lg bg-[#162942] hover:bg-[#1f3758] text-slate-200 transition-colors cursor-pointer"
+                        title={lang === 'ar' ? 'تصغير الوثيقة' : 'Réduire'}
+                      >
+                        <ZoomOut className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDocZoom(100)}
+                        className="px-2 py-1 rounded-lg bg-[#0B192C] border border-[#79C8E8]/25 text-[#DFC57B] font-mono text-[11px] cursor-pointer"
+                      >
+                        {docZoom}%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDocZoom((z) => Math.min(160, z + 15))}
+                        className="p-1.5 rounded-lg bg-[#162942] hover:bg-[#1f3758] text-slate-200 transition-colors cursor-pointer"
+                        title={lang === 'ar' ? 'تكبير الوثيقة' : 'Agrandir'}
+                      >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {onForward && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowForwardModal(true);
+                          setForwardError(null);
+                          setForwardSuccess(false);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#DFC57B] hover:bg-[#d4b663] text-[#0B192C] font-bold text-xs transition-colors cursor-pointer"
+                      >
+                        <Forward className={`w-3.5 h-3.5 ${lang === 'ar' ? 'rotate-180' : ''}`} />
+                        <span>{lang === 'ar' ? 'إعادة توجيه الوثيقة' : 'Transférer ce PDF'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3.5 bg-[#0B192C] rounded-xl border border-[#79C8E8]/25 text-xs">
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">{t.project}</span>
+                    <span className="text-white font-medium truncate block">{attachment.projectName}</span>
                   </div>
                   <div>
-                    <h4 className="font-bold text-white text-base">{attachment.fileName}</h4>
-                    <p className="text-xs text-[#A9DDF1]">
-                      {lang === 'ar' ? 'وثيقة تقنية معتمدة — ISONIL Maroc' : 'Document Technique ISONIL Maroc'}
-                    </p>
+                    <span className="text-slate-400 block mb-0.5">{t.uploadDate}</span>
+                    <span className="text-white font-medium">{new Date(attachment.uploadedAt).toLocaleDateString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">{t.fileSize}</span>
+                    <span className="text-white font-mono font-medium">{formatBytes(attachment.fileSizeBytes)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">{lang === 'ar' ? 'درجة السرية' : 'Confidentialité'}</span>
+                    <span className="text-[#DFC57B] font-semibold">{lang === 'ar' ? 'مشفر ومحمي' : 'Confidentiel'}</span>
                   </div>
                 </div>
-                <div className="px-3 py-1 rounded-lg bg-[#0B192C] text-[#DFC57B] text-xs font-mono border border-[#79C8E8]/30">
-                  ISO-DOC-{attachment.id.toUpperCase()}
-                </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-[#0B192C] rounded-xl border border-[#79C8E8]/25 mb-5 text-xs">
-                <div>
-                  <span className="text-slate-400 block mb-0.5">{t.project}</span>
-                  <span className="text-white font-medium truncate block">{attachment.projectName}</span>
+              {/* Embedded PDF Viewer or Interactive A4 Document Preview Sheet */}
+              <div className="bg-[#0B192C] border border-[#79C8E8]/30 rounded-2xl p-4 sm:p-6 shadow-2xl overflow-auto max-h-[60vh]">
+                <div className="flex items-center justify-between mb-3 text-xs text-[#A9DDF1]">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-[#DFC57B]" />
+                    <span className="font-semibold text-white">
+                      {lang === 'ar' ? 'معاينة محتوى الوثيقة المباشرة قبل الإرسال' : 'Aperçu direct du document avant transfert'}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[11px] text-slate-400">
+                    {fileExt.toUpperCase() || 'PDF'} · {formatBytes(attachment.fileSizeBytes)}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-slate-400 block mb-0.5">{t.uploadDate}</span>
-                  <span className="text-white font-medium">{new Date(attachment.uploadedAt).toLocaleDateString()}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block mb-0.5">{t.fileSize}</span>
-                  <span className="text-white font-mono font-medium">{formatBytes(attachment.fileSizeBytes)}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block mb-0.5">{lang === 'ar' ? 'درجة السرية' : 'Confidentialité'}</span>
-                  <span className="text-[#DFC57B] font-semibold">{lang === 'ar' ? 'مشفر ومحمي' : 'Confidentiel'}</span>
-                </div>
-              </div>
 
-              {attachment.notes && (
-                <div className="mt-4">
-                  <h5 className="font-semibold text-white mb-1">{lang === 'ar' ? 'الملاحظات الفنية المرفقة:' : 'Notes techniques :'}</h5>
-                  <p className="text-xs text-slate-200 bg-[#0B192C] p-3 rounded-xl border border-[#79C8E8]/25">
-                    {attachment.notes}
-                  </p>
-                </div>
-              )}
+                {pdfBlobUrl && pdfViewMode === 'embedded' ? (
+                  <div className="w-full rounded-xl overflow-hidden border border-[#79C8E8]/30 bg-white">
+                    <iframe
+                      src={pdfBlobUrl}
+                      title={attachment.title}
+                      className="w-full h-[50vh] border-0"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex justify-center overflow-auto py-2">
+                    <div
+                      style={{
+                        transform: `scale(${docZoom / 100})`,
+                        transformOrigin: 'top center',
+                      }}
+                      className="w-full max-w-2xl bg-white text-slate-900 rounded-xl shadow-2xl border border-slate-300 p-6 sm:p-8 transition-transform duration-200"
+                    >
+                      {/* Official A4 Document Preview Header */}
+                      <div className="flex flex-wrap items-start justify-between gap-4 border-b-2 border-[#0B192C] pb-4 mb-5">
+                        <div>
+                          <div className="text-lg font-black tracking-wider text-[#0B192C]">ISONIL MAROC</div>
+                          <div className="text-xs font-semibold text-slate-600">{t.companySubtitle}</div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">{t.companyAddress}</div>
+                        </div>
+                        <div className="text-end font-mono text-xs text-slate-700">
+                          <div className="font-bold text-[#0B192C]">
+                            {lang === 'ar' ? 'وثيقة تقنية رسمية (PDF)' : 'DOCUMENT TECHNIQUE OFFICIEL (PDF)'}
+                          </div>
+                          <div>RÉF : ISO-DOC-{attachment.id.toUpperCase()}</div>
+                          <div>DATE : {new Date(attachment.uploadedAt).toLocaleDateString()}</div>
+                        </div>
+                      </div>
+
+                      {/* Document Title & Project Summary */}
+                      <div className="mb-5">
+                        <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
+                          {lang === 'ar' ? 'عنوان المرفق والملف التقني' : 'Intitulé du document & fichier'}
+                        </div>
+                        <h3 className="text-base sm:text-lg font-bold text-[#0B192C]">{attachment.title}</h3>
+                        <p className="text-xs font-mono text-slate-600 mt-0.5">
+                          {attachment.fileName} · {formatBytes(attachment.fileSizeBytes)}
+                        </p>
+                      </div>
+
+                      {/* Structured Technical Table */}
+                      <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg bg-slate-100 border border-slate-200 text-xs mb-5">
+                        <div>
+                          <span className="text-slate-500 block">{t.project}</span>
+                          <span className="font-semibold text-slate-900">{attachment.projectName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">{lang === 'ar' ? 'معرّف المشروع' : 'Identifiant Projet'}</span>
+                          <span className="font-mono font-semibold text-slate-900">{attachment.projectId}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">{lang === 'ar' ? 'تاريخ الأرشفة' : "Date d'archivage"}</span>
+                          <span className="font-semibold text-slate-900">{new Date(attachment.uploadedAt).toLocaleDateString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">{lang === 'ar' ? 'حالة المطابقة' : 'Statut de conformité'}</span>
+                          <span className="font-semibold text-emerald-700">
+                            {lang === 'ar' ? 'معتمد ومطابق للمعايير' : 'Vérifié & Conforme ISONIL'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Document Technical Content / Notes */}
+                      <div className="mb-6">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-[#0B192C] mb-2">
+                          {lang === 'ar' ? 'التقرير والمحتوى التقني المرفق:' : 'Contenu & Observations Techniques :'}
+                        </h4>
+                        <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap">
+                          {attachment.notes ||
+                            (lang === 'ar'
+                              ? 'تقرير تقني معتمد صادر عن مختبر ومكتب دراسات ISONIL Maroc بخصوص أعمال العزل الحراري والصوتي ومعالجة الرطوبة للمشروع المذكور أعلاه.'
+                              : "Rapport technique certifié émis par le bureau d'études ISONIL Maroc concernant les travaux d'isolation thermique, acoustique et d'étanchéité du projet référencé ci-dessus.")}
+                        </div>
+                      </div>
+
+                      {/* Document Footer Certification */}
+                      <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
+                        <div>
+                          <span className="font-semibold text-slate-700">ISONIL MAROC S.A.R.L</span> · contact@isonil.com
+                        </div>
+                        <div className="font-mono text-slate-700">
+                          PAGE 1 / 1 · CERTIFIÉ ISO
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* Notes / Report */}
-          {attachment.category === 'note' && (
+          {attachment.category === 'note' && !isImageFormat && !isPdfOrDocumentFormat && (
             <div className="max-w-2xl mx-auto bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-6 shadow-xl">
               <div className="flex items-center gap-2 text-[#DFC57B] font-semibold text-sm mb-3">
                 <FileText className="w-5 h-5" />
@@ -738,10 +1085,10 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
         </div>
       )}
 
-      {/* FORWARD MODAL */}
+      {/* FORWARD MODAL WITH BUILT-IN IMAGE & PDF PREVIEW */}
       {showForwardModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-6 shadow-2xl">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-lg bg-[#112239] border border-[#79C8E8]/30 rounded-2xl p-6 shadow-2xl my-auto">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 font-bold text-[#DFC57B] text-base">
                 <Forward className="w-5 h-5 text-[#79C8E8]" />
@@ -749,7 +1096,7 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
               </div>
               <button
                 onClick={() => setShowForwardModal(false)}
-                className="p-1 rounded bg-[#162942] text-slate-300 hover:text-white"
+                className="p-1 rounded bg-[#162942] text-slate-300 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -804,6 +1151,130 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
               </div>
             ) : (
               <form onSubmit={handleForwardSubmit} className="space-y-4">
+                {/* Pre-Forward Live Document / Image Preview Section */}
+                <div className="rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 overflow-hidden">
+                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-[#162942]/70 border-b border-[#79C8E8]/20">
+                    <div className="flex items-center gap-2 text-xs">
+                      {isImageFormat ? (
+                        <ImageIcon className="w-4 h-4 text-[#DFC57B]" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-[#DFC57B]" />
+                      )}
+                      <span className="font-semibold text-white">
+                        {lang === 'ar' ? 'معاينة المرفق قبل الإرسال' : 'Aperçu de la pièce jointe'}
+                      </span>
+                      <span className="text-slate-400" aria-hidden="true">·</span>
+                      <span className="font-mono text-[11px] text-[#A9DDF1]">
+                        {formatBytes(attachment.fileSizeBytes)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {(isImageFormat || isPdfOrDocumentFormat) && showForwardInlinePreview && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandForwardPreview((prev) => !prev)}
+                          className="px-2 py-1 rounded-lg bg-[#0B192C] hover:bg-[#112239] text-[#79C8E8] text-[11px] font-medium cursor-pointer"
+                        >
+                          {expandForwardPreview
+                            ? lang === 'ar'
+                              ? 'تصغير'
+                              : 'Réduire'
+                            : lang === 'ar'
+                            ? 'تكبير المعاينة'
+                            : 'Agrandir'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowForwardInlinePreview((prev) => !prev)}
+                        className="p-1 rounded-lg bg-[#0B192C] hover:bg-[#112239] text-slate-300 hover:text-white cursor-pointer"
+                        title={
+                          showForwardInlinePreview
+                            ? lang === 'ar'
+                              ? 'إخفاء المعاينة'
+                              : "Masquer l'aperçu"
+                            : lang === 'ar'
+                            ? 'إظهار المعاينة'
+                            : "Afficher l'aperçu"
+                        }
+                      >
+                        {showForwardInlinePreview ? (
+                          <EyeOff className="w-3.5 h-3.5" />
+                        ) : (
+                          <Eye className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {showForwardInlinePreview && (
+                    <div className="p-3 space-y-2.5">
+                      {/* Image Preview Inside Forward Modal */}
+                      {isImageFormat && (
+                        <div
+                          className={`w-full rounded-lg overflow-hidden bg-black flex items-center justify-center border border-[#79C8E8]/20 transition-all ${
+                            expandForwardPreview ? 'max-h-64' : 'max-h-36'
+                          }`}
+                        >
+                          <img
+                            src={normalizedFileUrl}
+                            alt={attachment.title}
+                            className={`w-auto max-w-full object-contain ${
+                              expandForwardPreview ? 'max-h-60' : 'max-h-32'
+                            }`}
+                          />
+                        </div>
+                      )}
+
+                      {/* PDF / Document Preview Inside Forward Modal */}
+                      {isPdfOrDocumentFormat && (
+                        <div
+                          className={`w-full rounded-lg overflow-auto bg-white text-slate-900 border border-slate-300 p-3 transition-all ${
+                            expandForwardPreview ? 'max-h-64' : 'max-h-36'
+                          }`}
+                        >
+                          {pdfBlobUrl && expandForwardPreview ? (
+                            <iframe
+                              src={pdfBlobUrl}
+                              title={attachment.title}
+                              className="w-full h-56 border-0"
+                            />
+                          ) : (
+                            <div className="space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                                <span className="font-black text-[#0B192C] text-[11px] tracking-wide">
+                                  ISONIL MAROC · PDF
+                                </span>
+                                <span className="font-mono text-[10px] text-slate-500">
+                                  ISO-DOC-{attachment.id.toUpperCase()}
+                                </span>
+                              </div>
+                              <div className="font-bold text-slate-900 text-xs">{attachment.title}</div>
+                              <div className="text-[11px] text-slate-600 line-clamp-3 leading-relaxed">
+                                {attachment.notes ||
+                                  (lang === 'ar'
+                                    ? 'وثيقة تقنية رسمية معتمدة جاهزة للإرسال كمرفق عبر البريد الإلكتروني.'
+                                    : 'Document technique certifié prêt à être transmis en pièce jointe par e-mail.')}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Summary Line */}
+                      <div className="flex items-center justify-between text-[11px] text-slate-300 pt-0.5">
+                        <span className="font-medium text-white truncate max-w-[65%]">
+                          {attachment.title} ({attachment.fileName})
+                        </span>
+                        <span className="text-[#A9DDF1] truncate max-w-[33%]">
+                          {attachment.projectName}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {forwardError && (
                   <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-200 text-xs flex items-start gap-2.5">
                     <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
@@ -819,14 +1290,22 @@ export const AttachmentViewerModal: React.FC<AttachmentViewerModalProps> = ({
                     {t.forwardRecipient} *
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
                     disabled={isForwarding}
                     value={forwardEmail}
-                    onChange={(e) => setForwardEmail(e.target.value)}
-                    placeholder="destinataire@entreprise.ma"
-                    className="w-full px-3 py-2 rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 focus:border-[#DFC57B] focus:outline-none text-white text-xs disabled:opacity-50"
+                    onChange={(e) => {
+                      setForwardEmail(e.target.value);
+                      if (forwardError) setForwardError(null);
+                    }}
+                    placeholder="destinataire@entreprise.ma, contact@client.com"
+                    className="w-full px-3 py-2 rounded-xl bg-[#0B192C] border border-[#79C8E8]/30 focus:border-[#DFC57B] focus:outline-none text-white text-xs disabled:opacity-50 font-mono"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {lang === 'ar'
+                      ? 'يمكنك إدخال بريد إلكتروني واحد أو عدة عناوين مفصولة بفاصلة (,).'
+                      : 'Vous pouvez saisir une ou plusieurs adresses séparées par une virgule (,).'}
+                  </p>
                 </div>
 
                 <div>

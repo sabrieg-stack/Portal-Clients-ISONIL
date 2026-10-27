@@ -108,11 +108,11 @@ const THEME_HEX: Record<ThemeColor, {
     hover: '#d4b663', 
     glow: 'rgba(223, 197, 123, 0.22)', 
     border: 'rgba(121, 200, 232, 0.45)', 
-    contrast: '#0B192C',
-    bgMain: '#0B192C',
-    bgSurface: '#112239',
-    bgSubtle: '#071220',
-    bgHover: '#162942',
+    contrast: '#151921',
+    bgMain: '#151921',
+    bgSurface: '#1D222B',
+    bgSubtle: '#101319',
+    bgHover: '#252C37',
     textMain: '#FFFFFF',
     textMuted: '#94A3B8',
   },
@@ -900,6 +900,14 @@ export default function App() {
     messageId?: string;
     previewUrl?: string | null;
   }> => {
+    if (!currentUser) {
+      return {
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: lang === 'ar' ? 'يرجى تسجيل الدخول أولاً' : 'Veuillez vous connecter',
+      };
+    }
+
     const targetAtt = attachments.find((a) => a.id === attachmentId);
     if (!targetAtt) {
       return {
@@ -919,16 +927,20 @@ export default function App() {
           attachment: targetAtt,
           recipientEmail: email,
           note,
-          senderEmail: currentUser?.email || 'contact@isonil.com',
-          senderName: currentUser?.fullName || 'Direction ISONIL',
-          senderRole: currentUser?.role || 'client',
-          clientId: currentUser?.id,
+          senderEmail: currentUser.email,
+          senderName: currentUser.fullName,
+          senderRole: currentUser.role,
+          clientId: currentUser.id,
+          allowedProjectIds:
+            currentUser.role === 'admin'
+              ? projects.map((p) => p.id)
+              : clientProjects.map((p) => p.id),
         }),
       });
 
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (response.ok && data.success && data.messageId) {
         // Only update local notes if real delivery succeeded
         const timestamp = new Date().toLocaleTimeString(lang === 'ar' ? 'ar-MA' : 'fr-FR', {
           hour: '2-digit',
